@@ -38,7 +38,7 @@ function renderPage(): void {
 const samplePlan: RecoveryPlan = {
   id: 'p-1',
   user_id: 'u-1',
-  plan_type: '7-day-breakup',
+  plan_type: '7day-breakup',
   total_days: 7,
   current_day: 2,
   status: 'active',
@@ -82,9 +82,9 @@ describe('<RecoveryPage />', () => {
     expect(screen.getByText('适合刚分手、反复联系的情况')).toBeInTheDocument();
     expect(screen.getByText('14天停止内耗')).toBeInTheDocument();
     expect(screen.getByText('适合暧昧期、反复纠结的情况')).toBeInTheDocument();
-    expect(screen.getByTestId('plan-option-7-day-breakup')).toBeInTheDocument();
+    expect(screen.getByTestId('plan-option-7day-breakup')).toBeInTheDocument();
     expect(
-      screen.getByTestId('plan-option-14-day-overthinking')
+      screen.getByTestId('plan-option-14day-rumination')
     ).toBeInTheDocument();
   });
 
@@ -96,13 +96,13 @@ describe('<RecoveryPage />', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByTestId('plan-option-7-day-breakup')).toBeInTheDocument();
+      expect(screen.getByTestId('plan-option-7day-breakup')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByTestId('plan-option-7-day-breakup'));
+    fireEvent.click(screen.getByTestId('plan-option-7day-breakup'));
 
     await waitFor(() => {
-      expect(mockedCreatePlan).toHaveBeenCalledWith('7-day-breakup');
+      expect(mockedCreatePlan).toHaveBeenCalledWith('7day-breakup');
     });
     await waitFor(() => {
       expect(mockedGetPlanDetail).toHaveBeenCalledWith('p-1');
