@@ -34,4 +34,33 @@ describe('<ChatInput />', () => {
     const button = screen.getByText('发送') as HTMLButtonElement;
     expect(button.disabled).toBe(true);
   });
+
+  it('disables textarea while streaming', () => {
+    render(<ChatInput streaming onSend={() => undefined} />);
+    const textarea = screen.getByLabelText('输入消息') as HTMLTextAreaElement;
+    expect(textarea.disabled).toBe(true);
+  });
+
+  it('applies max-height limit so it cannot grow indefinitely', () => {
+    render(<ChatInput onSend={() => undefined} />);
+    const textarea = screen.getByLabelText('输入消息') as HTMLTextAreaElement;
+    expect(textarea.className).toMatch(/max-h-\[120px\]/);
+    expect(textarea.className).toMatch(/overflow-y-auto/);
+  });
+
+  it('syncs external value (controlled prefill from quick topics)', () => {
+    const onValueChange = vi.fn();
+    const { rerender } = render(
+      <ChatInput value="" onValueChange={onValueChange} onSend={() => undefined} />
+    );
+    rerender(
+      <ChatInput
+        value="预填话题"
+        onValueChange={onValueChange}
+        onSend={() => undefined}
+      />
+    );
+    const textarea = screen.getByLabelText('输入消息') as HTMLTextAreaElement;
+    expect(textarea.value).toBe('预填话题');
+  });
 });

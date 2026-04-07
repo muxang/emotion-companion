@@ -5,6 +5,8 @@ export interface ChatViewMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  /** 消息创建时间（ISO 字符串），用于显示时间戳 */
+  createdAt: string;
   /** 流式中标记，true 时显示打字光标 */
   streaming?: boolean;
 }
@@ -44,16 +46,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   async send(sessionId, content) {
     if (get().status === 'streaming') return;
+    const now = new Date().toISOString();
     const userMsg: ChatViewMessage = {
       id: nextId(),
       role: 'user',
       content,
+      createdAt: now,
     };
     const assistantId = nextId();
     const assistantMsg: ChatViewMessage = {
       id: assistantId,
       role: 'assistant',
       content: '',
+      createdAt: new Date().toISOString(),
       streaming: true,
     };
     set({
