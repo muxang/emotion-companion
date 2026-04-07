@@ -23,7 +23,9 @@
       "Bash(pnpm --filter @emotion/web --filter @emotion/api run test)",
       "Bash(pnpm --filter @emotion/web run test)",
       "Bash(pnpm typecheck:*)",
-      "Bash(pnpm --filter @emotion/web test)"
+      "Bash(pnpm --filter @emotion/web test)",
+      "Bash(cat packages/skills/recovery-plan/tests/*.test.ts)",
+      "Bash(pnpm --filter @emotion/skill-recovery-plan run test)"
     ]
   }
 }

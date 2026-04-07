@@ -44,6 +44,9 @@ importers:
       '@emotion/skill-message-coach':
         specifier: workspace:*
         version: link:../../packages/skills/message-coach
+      '@emotion/skill-recovery-plan':
+        specifier: workspace:*
+        version: link:../../packages/skills/recovery-plan
       '@emotion/skill-safety-triage':
         specifier: workspace:*
         version: link:../../packages/skills/safety-triage
@@ -284,6 +287,9 @@ importers:
 
   packages/skills/recovery-plan:
     dependencies:
+      '@emotion/core-ai':
+        specifier: workspace:*
+        version: link:../../core-ai
       '@emotion/shared':
         specifier: workspace:*
         version: link:../../shared

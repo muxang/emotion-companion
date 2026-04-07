@@ -7,6 +7,7 @@ import type {
 import type { AIClient } from '@emotion/core-ai';
 import type { MessageRepository } from '../db/repositories/messages.js';
 import type { SessionRepository } from '../db/repositories/sessions.js';
+import type { RecoveryRepository } from '../db/repositories/recovery.js';
 
 export interface OrchestratorInput {
   user_id: string;
@@ -43,6 +44,8 @@ export interface OrchestratorDeps {
   repos: {
     sessions: SessionRepository;
     messages: MessageRepository;
+    /** Phase 6：可选恢复计划仓库；缺省时 recovery 模式走通用引导文案 */
+    recovery?: RecoveryRepository;
   };
   signal: AbortSignal;
   logger: {

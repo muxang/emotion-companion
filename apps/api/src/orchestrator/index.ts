@@ -27,6 +27,11 @@ import {
   BlockedByRiskError as CoachBlockedByRiskError,
   runMessageCoach,
 } from '@emotion/skill-message-coach';
+import {
+  BlockedByRiskError as RecoveryBlockedByRiskError,
+  makeSafeDefaultTask,
+  runRecoveryPlan,
+} from '@emotion/skill-recovery-plan';
 import { collectStream } from '@emotion/core-ai';
 import { classifyByKeywords } from '@emotion/safety';
 import type {
@@ -34,6 +39,7 @@ import type {
   ConversationMode,
   IntakeResult,
   MessageCoachResult,
+  RecoveryTask,
   RiskLevel,
 } from '@emotion/shared';
 import { decideMode } from './router.js';
@@ -48,6 +54,10 @@ import {
   buildCoachInputFromIntake,
   formatCoachText,
 } from './coach-input.js';
+import {
+  formatRecoveryText,
+  NO_ACTIVE_PLAN_TEXT,
+} from './recovery-input.js';
 import type {
   IntakeResultPublic,
   OrchestratorDeps,
@@ -165,6 +175,8 @@ export async function* orchestrate(
   let analysisInitialText: string | null = null;
   let coachStructured: MessageCoachResult | null = null;
   let coachInitialText: string | null = null;
+  let recoveryStructured: RecoveryTask | null = null;
+  let recoveryInitialText: string | null = null;
   if (decision.mode === 'analysis') {
     try {
       const tongInput = buildAnalysisInputFromIntake(intake, input.user_text);
@@ -237,6 +249,64 @@ export async function* orchestrate(
     }
   }
 
+  // ---------- Recovery 预运行 ----------
+  // 与 analysis/coach 同构：
+  //   - 有 recovery repo + 有 user：查 active plan
+  //     - 无 active plan → 引导文案
+  //     - 有 active plan → runRecoveryPlan 生成今日任务，拼接为流式文本
+  //   - 没有 recovery repo（旧测试场景）→ 引导文案
+  //   - critical → 第二道防线兜底为 safety
+  if (decision.mode === 'recovery') {
+    if (deps.repos.recovery && deps.user) {
+      try {
+        const activePlan = await deps.repos.recovery.getActivePlanByUser(
+          deps.user.id
+        );
+        if (!activePlan) {
+          recoveryInitialText = NO_ACTIVE_PLAN_TEXT;
+        } else {
+          const task = await runRecoveryPlan(
+            {
+              plan_type: activePlan.plan_type,
+              day_index: activePlan.current_day,
+            },
+            {
+              ai: deps.ai,
+              risk_level: decision.effective_risk,
+              signal: deps.signal,
+              timeoutMs: deps.intakeTimeoutMs,
+            }
+          );
+          recoveryStructured = task;
+          recoveryInitialText = formatRecoveryText(task);
+        }
+      } catch (err) {
+        if (err instanceof RecoveryBlockedByRiskError) {
+          log.warn(
+            { requestId, risk_level: err.risk_level },
+            'recovery-plan blocked by second-line guard, falling back to safety'
+          );
+          decision = {
+            mode: 'safety',
+            effective_risk: decision.effective_risk,
+            reason: 'recovery_plan_blocked_fallback',
+          };
+        } else if (deps.signal.aborted) {
+          log.info({ requestId }, 'recovery aborted before meta');
+          yield { type: 'error', code: 'ABORTED', message: '请求已中止' };
+          return;
+        } else {
+          log.warn({ err, requestId }, 'recovery-plan unexpected error');
+          // 兜底：仍然给出一段安全的引导，避免 finalText 为空
+          recoveryInitialText = NO_ACTIVE_PLAN_TEXT;
+        }
+      }
+    } else {
+      // 无 recovery repo 注入（旧测试 / 无登录用户）
+      recoveryInitialText = NO_ACTIVE_PLAN_TEXT;
+    }
+  }
+
   log.info(
     {
       requestId,
@@ -293,6 +363,39 @@ export async function* orchestrate(
     }
   };
 
+  // recovery 模式的 regenerate：重新跑一次 runRecoveryPlan
+  // 若没有 active plan / 没有 recovery repo，回退引导文案
+  const regenerateRecovery = async (): Promise<string> => {
+    if (!deps.repos.recovery || !deps.user) {
+      return NO_ACTIVE_PLAN_TEXT;
+    }
+    try {
+      const activePlan = await deps.repos.recovery.getActivePlanByUser(
+        deps.user.id
+      );
+      if (!activePlan) return NO_ACTIVE_PLAN_TEXT;
+      const task = await runRecoveryPlan(
+        {
+          plan_type: activePlan.plan_type,
+          day_index: activePlan.current_day,
+        },
+        {
+          ai: deps.ai,
+          risk_level: decision.effective_risk,
+          signal: deps.signal,
+          timeoutMs: deps.intakeTimeoutMs,
+        }
+      );
+      recoveryStructured = task;
+      return formatRecoveryText(task);
+    } catch (err) {
+      log.warn({ err, requestId }, 'recovery-plan regenerate failed');
+      const fallback = makeSafeDefaultTask(1);
+      recoveryStructured = fallback;
+      return formatRecoveryText(fallback);
+    }
+  };
+
   // coach 模式的 regenerate：重新跑 runMessageCoach 并刷新 structured 结果
   const regenerateCoach = async (): Promise<string> => {
     const coachInput = buildCoachInputFromIntake(intake, input.user_text);
@@ -318,6 +421,9 @@ export async function* orchestrate(
     if (decision.mode === 'coach') {
       return regenerateCoach();
     }
+    if (decision.mode === 'recovery') {
+      return regenerateRecovery();
+    }
     const stream = pickSkillStream(
       decision.mode,
       intake,
@@ -341,6 +447,8 @@ export async function* orchestrate(
     } else if (decision.mode === 'coach') {
       // 同 analysis：复用预运行结果，失败则当场补跑一次
       firstText = coachInitialText ?? (await regenerateCoach());
+    } else if (decision.mode === 'recovery') {
+      firstText = recoveryInitialText ?? (await regenerateRecovery());
     } else {
       firstText = await runOnce();
     }
@@ -420,7 +528,9 @@ export async function* orchestrate(
             ? (analysisStructured as unknown as Record<string, unknown>)
             : coachStructured
               ? (coachStructured as unknown as Record<string, unknown>)
-              : null,
+              : recoveryStructured
+                ? (recoveryStructured as unknown as Record<string, unknown>)
+                : null,
       });
       // 计数 +2（user + assistant）；user 未写时只 +1
       const delta = userWritten ? 2 : 1;

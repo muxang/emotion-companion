@@ -14,9 +14,11 @@ import type { UserRepository } from './db/repositories/users.js';
 import type { SessionRepository } from './db/repositories/sessions.js';
 import type { MessageRepository } from './db/repositories/messages.js';
 import type { MemoryRepository } from './db/repositories/memory.js';
+import type { RecoveryRepository } from './db/repositories/recovery.js';
 import type { OrchestratorMemoryDeps } from './orchestrator/types.js';
 import { memoryRoutes } from './routes/memory.js';
 import { settingsRoutes } from './routes/settings.js';
+import { recoveryRoutes } from './routes/recovery.js';
 
 export interface BuildAppOptions {
   repos: {
@@ -24,6 +26,7 @@ export interface BuildAppOptions {
     sessions: SessionRepository;
     messages: MessageRepository;
     memory: MemoryRepository;
+    recovery: RecoveryRepository;
   };
   aiClient: AIClient;
   /** Phase 5：可选记忆依赖闭包（生产环境注入；测试可省略或注入 mock） */
@@ -96,6 +99,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(analysisRoutes, { prefix: '/api' });
   await app.register(memoryRoutes, { prefix: '/api' });
   await app.register(settingsRoutes, { prefix: '/api' });
+  await app.register(recoveryRoutes, { prefix: '/api' });
 
   return app;
 }

@@ -146,7 +146,11 @@ export async function chatStreamRoutes(app: FastifyInstance): Promise<void> {
           },
           {
             ai: app.aiClient,
-            repos: { sessions: app.repos.sessions, messages: app.repos.messages },
+            repos: {
+              sessions: app.repos.sessions,
+              messages: app.repos.messages,
+              recovery: app.repos.recovery,
+            },
             signal: ac.signal,
             logger: request.log,
             intakeTimeoutMs: env.INTAKE_TIMEOUT_MS,

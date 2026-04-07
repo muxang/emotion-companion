@@ -4,6 +4,7 @@ import type { UserRepository } from '../db/repositories/users.js';
 import type { SessionRepository } from '../db/repositories/sessions.js';
 import type { MessageRepository } from '../db/repositories/messages.js';
 import type { MemoryRepository } from '../db/repositories/memory.js';
+import type { RecoveryRepository } from '../db/repositories/recovery.js';
 import type { OrchestratorMemoryDeps } from '../orchestrator/types.js';
 
 declare module 'fastify' {
@@ -13,6 +14,7 @@ declare module 'fastify' {
       sessions: SessionRepository;
       messages: MessageRepository;
       memory: MemoryRepository;
+      recovery: RecoveryRepository;
     };
     aiClient: AIClient;
     /** Phase 5: orchestrator 的记忆依赖闭包；测试可注入 mock */

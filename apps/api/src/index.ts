@@ -12,6 +12,7 @@ import { createUserRepository } from './db/repositories/users.js';
 import { createSessionRepository } from './db/repositories/sessions.js';
 import { createMessageRepository } from './db/repositories/messages.js';
 import { createMemoryRepository } from './db/repositories/memory.js';
+import { createRecoveryRepository } from './db/repositories/recovery.js';
 import type { OrchestratorMemoryDeps } from './orchestrator/types.js';
 
 async function bootstrap(): Promise<void> {
@@ -42,6 +43,7 @@ async function bootstrap(): Promise<void> {
       sessions: createSessionRepository(pool),
       messages: createMessageRepository(pool),
       memory: createMemoryRepository(pool),
+      recovery: createRecoveryRepository(pool),
     },
     aiClient,
     memoryDeps,

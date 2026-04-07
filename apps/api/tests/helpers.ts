@@ -11,9 +11,17 @@ import type {
 import type { SessionRepository } from '../src/db/repositories/sessions.js';
 import type { MemoryRepository } from '../src/db/repositories/memory.js';
 import type {
+  CompleteCheckinResult,
+  RecoveryRepository,
+} from '../src/db/repositories/recovery.js';
+import type {
   ConversationMode,
   MemorySummaryDTO,
   MessageDTO,
+  RecoveryCheckinDTO,
+  RecoveryPlanDTO,
+  RecoveryPlanStatus,
+  RecoveryPlanType,
   RelationshipEntityDTO,
   RelationshipEventDTO,
   RiskLevel,
@@ -38,6 +46,9 @@ export interface MockState {
   events: Map<string, RelationshipEventDTO[]>;
   summaries: Map<string, MemorySummaryDTO[]>;
   memoryDeleteCalls: number;
+  // Phase 6 recovery state
+  recoveryPlans: Map<string, RecoveryPlanDTO>;
+  recoveryCheckins: Map<string, RecoveryCheckinDTO[]>;
 }
 
 export function makeMockRepos(): {
@@ -46,6 +57,7 @@ export function makeMockRepos(): {
   sessions: SessionRepository;
   messages: MessageRepository;
   memory: MemoryRepository;
+  recovery: RecoveryRepository;
 } {
   const state: MockState = {
     usersByAnonymousId: new Map(),
@@ -62,6 +74,8 @@ export function makeMockRepos(): {
     events: new Map(),
     summaries: new Map(),
     memoryDeleteCalls: 0,
+    recoveryPlans: new Map(),
+    recoveryCheckins: new Map(),
   };
 
   let userCounter = 0;
@@ -340,7 +354,137 @@ export function makeMockRepos(): {
     },
   };
 
-  return { state, users, sessions, messages, memory };
+  // ============================================================
+  // Phase 6 recovery mock
+  // ============================================================
+  let planCounter = 0;
+  let checkinCounter = 0;
+  const PLAN_TOTAL_DAYS: Record<RecoveryPlanType, number> = {
+    '7day-breakup': 7,
+    '14day-rumination': 14,
+  };
+
+  const recovery: RecoveryRepository = {
+    async listPlansByUser(userId) {
+      return Array.from(state.recoveryPlans.values())
+        .filter((p) => p.user_id === userId)
+        .sort((a, b) => b.started_at.localeCompare(a.started_at));
+    },
+    async getPlanById(id, userId) {
+      const p = state.recoveryPlans.get(id);
+      if (!p || p.user_id !== userId) return null;
+      return p;
+    },
+    async getActivePlanByUser(userId) {
+      const list = Array.from(state.recoveryPlans.values())
+        .filter((p) => p.user_id === userId && p.status === 'active')
+        .sort((a, b) => b.started_at.localeCompare(a.started_at));
+      return list[0] ?? null;
+    },
+    async createPlan(userId, planType) {
+      planCounter++;
+      const id = `33333333-3333-3333-3333-${String(planCounter).padStart(12, '0')}`;
+      const now = new Date().toISOString();
+      const plan: RecoveryPlanDTO = {
+        id,
+        user_id: userId,
+        plan_type: planType,
+        total_days: PLAN_TOTAL_DAYS[planType],
+        current_day: 1,
+        status: 'active',
+        payload_json: {},
+        started_at: now,
+        updated_at: now,
+      };
+      state.recoveryPlans.set(id, plan);
+      state.recoveryCheckins.set(id, []);
+      return plan;
+    },
+    async updatePlanStatus(id, status) {
+      const p = state.recoveryPlans.get(id);
+      if (!p) return null;
+      const updated: RecoveryPlanDTO = {
+        ...p,
+        status: status as RecoveryPlanStatus,
+        updated_at: new Date().toISOString(),
+      };
+      state.recoveryPlans.set(id, updated);
+      return updated;
+    },
+    async listCheckinsByPlan(planId) {
+      const arr = state.recoveryCheckins.get(planId) ?? [];
+      return [...arr].sort((a, b) => a.day_index - b.day_index);
+    },
+    async getOrCreateCheckin(planId, dayIndex) {
+      const arr = state.recoveryCheckins.get(planId) ?? [];
+      const existing = arr.find((c) => c.day_index === dayIndex);
+      if (existing) return existing;
+      checkinCounter++;
+      const checkin: RecoveryCheckinDTO = {
+        id: `44444444-4444-4444-4444-${String(checkinCounter).padStart(12, '0')}`,
+        plan_id: planId,
+        day_index: dayIndex,
+        completed: false,
+        reflection: null,
+        mood_score: null,
+        created_at: new Date().toISOString(),
+      };
+      arr.push(checkin);
+      state.recoveryCheckins.set(planId, arr);
+      return checkin;
+    },
+    async completeCheckin(
+      planId,
+      userId,
+      dayIndex,
+      reflection,
+      moodScore
+    ): Promise<CompleteCheckinResult | null> {
+      const plan = state.recoveryPlans.get(planId);
+      if (!plan || plan.user_id !== userId) return null;
+
+      const arr = state.recoveryCheckins.get(planId) ?? [];
+      let checkin = arr.find((c) => c.day_index === dayIndex);
+      if (checkin) {
+        checkin = {
+          ...checkin,
+          completed: true,
+          reflection,
+          mood_score: moodScore,
+        };
+        const idx = arr.findIndex((c) => c.day_index === dayIndex);
+        arr[idx] = checkin;
+      } else {
+        checkinCounter++;
+        checkin = {
+          id: `44444444-4444-4444-4444-${String(checkinCounter).padStart(12, '0')}`,
+          plan_id: planId,
+          day_index: dayIndex,
+          completed: true,
+          reflection,
+          mood_score: moodScore,
+          created_at: new Date().toISOString(),
+        };
+        arr.push(checkin);
+      }
+      state.recoveryCheckins.set(planId, arr);
+
+      const nextDay = plan.current_day + 1;
+      const nextStatus: RecoveryPlanStatus =
+        nextDay > plan.total_days ? 'completed' : plan.status;
+      const updatedPlan: RecoveryPlanDTO = {
+        ...plan,
+        current_day: nextDay,
+        status: nextStatus,
+        updated_at: new Date().toISOString(),
+      };
+      state.recoveryPlans.set(planId, updatedPlan);
+
+      return { checkin, plan: updatedPlan };
+    },
+  };
+
+  return { state, users, sessions, messages, memory, recovery };
 }
 
 // ============================================================
@@ -456,6 +600,7 @@ export async function buildTestApp(
       sessions: mocks.sessions,
       messages: mocks.messages,
       memory: mocks.memory,
+      recovery: mocks.recovery,
     },
     aiClient,
   });
