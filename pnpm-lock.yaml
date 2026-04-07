@@ -44,6 +44,9 @@ importers:
       '@emotion/skill-safety-triage':
         specifier: workspace:*
         version: link:../../packages/skills/safety-triage
+      '@emotion/skill-tong-analysis':
+        specifier: workspace:*
+        version: link:../../packages/skills/tong-analysis
       '@fastify/cors':
         specifier: ^9.0.1
         version: 9.0.1
@@ -298,6 +301,9 @@ importers:
 
   packages/skills/tong-analysis:
     dependencies:
+      '@emotion/core-ai':
+        specifier: workspace:*
+        version: link:../../core-ai
       '@emotion/shared':
         specifier: workspace:*
         version: link:../../shared

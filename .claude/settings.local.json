@@ -11,7 +11,12 @@
       "Bash(echo \"EXIT=$?\")",
       "Bash(pnpm -r --stream run typecheck)",
       "Bash(pnpm -r --stream run test)",
-      "Bash(pnpm exec:*)"
+      "Bash(grep:*)",
+      "Bash(pnpm --filter @emotion/skill-tong-analysis run typecheck)",
+      "Bash(pnpm --filter @emotion/shared run typecheck)",
+      "Bash(pnpm --filter @emotion/api run typecheck)",
+      "Bash(pnpm --filter @emotion/skill-tong-analysis run test)",
+      "Bash(pnpm --filter @emotion/shared run test)"
     ]
   }
 }
