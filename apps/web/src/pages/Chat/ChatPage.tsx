@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore.js';
 import { useSessionStore } from '../../stores/sessionStore.js';
 import { useChatStore } from '../../stores/chatStore.js';
@@ -120,13 +121,21 @@ export function ChatPage(): JSX.Element {
           <h1 className="text-sm font-medium text-warm-700">
             {currentSession?.title ?? '情感陪伴'}
           </h1>
-          <button
-            type="button"
-            className="text-xs text-warm-700/60 md:hidden"
-            onClick={handleNewSession}
-          >
-            + 新对话
-          </button>
+          <div className="flex items-center gap-3">
+            <Link
+              to="/analysis"
+              className="text-xs text-warm-700/60 hover:text-warm-700"
+            >
+              关系分析
+            </Link>
+            <button
+              type="button"
+              className="text-xs text-warm-700/60 md:hidden"
+              onClick={handleNewSession}
+            >
+              + 新对话
+            </button>
+          </div>
         </header>
         <div className="flex-1 overflow-y-auto">
           <MessageList messages={messages} />
