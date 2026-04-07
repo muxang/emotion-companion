@@ -90,7 +90,12 @@ export function buildCompanionPrompt(input: CompanionInput): {
   tone: CompanionTone;
 } {
   const tone = inferTone(input);
-  const system = TONE_PROMPT_MAP[tone];
+  const baseSystem = TONE_PROMPT_MAP[tone];
+  const memoryBlock =
+    input.memory_context && input.memory_context.trim().length > 0
+      ? `\n\n【已知长期上下文，仅供参考、不要在回复中复述】\n${input.memory_context.trim()}`
+      : '';
+  const system = `${baseSystem}${memoryBlock}`;
 
   const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
 

@@ -13,14 +13,20 @@ import { analysisRoutes } from './routes/analysis.js';
 import type { UserRepository } from './db/repositories/users.js';
 import type { SessionRepository } from './db/repositories/sessions.js';
 import type { MessageRepository } from './db/repositories/messages.js';
+import type { MemoryRepository } from './db/repositories/memory.js';
+import type { OrchestratorMemoryDeps } from './orchestrator/types.js';
+import { memoryRoutes } from './routes/memory.js';
 
 export interface BuildAppOptions {
   repos: {
     users: UserRepository;
     sessions: SessionRepository;
     messages: MessageRepository;
+    memory: MemoryRepository;
   };
   aiClient: AIClient;
+  /** Phase 5：可选记忆依赖闭包（生产环境注入；测试可省略或注入 mock） */
+  memoryDeps?: OrchestratorMemoryDeps;
 }
 
 /**
@@ -51,6 +57,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // 注入 repositories 与 AI client
   app.decorate('repos', options.repos);
   app.decorate('aiClient', options.aiClient);
+  app.decorate('memoryDeps', options.memoryDeps);
 
   // JWT + requireAuth
   await app.register(jwtPlugin);
@@ -61,6 +68,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(sessionRoutes, { prefix: '/api' });
   await app.register(chatStreamRoutes, { prefix: '/api' });
   await app.register(analysisRoutes, { prefix: '/api' });
+  await app.register(memoryRoutes, { prefix: '/api' });
 
   return app;
 }

@@ -1,6 +1,7 @@
 /**
- * Memory subsystem - Phase 0 placeholder.
- * Phase 5 实现完整短期/长期/timeline/summarizer。
+ * Memory subsystem - Phase 5
+ * 直接持有 pg Pool 处理短期/长期/摘要/抽取业务流程。
+ * apps/api 的 routes 层 CRUD 走 db/repositories/memory.ts。
  */
 export * from './short-term.js';
 export * from './long-term.js';

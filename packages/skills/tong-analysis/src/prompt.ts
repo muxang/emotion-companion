@@ -40,6 +40,15 @@ export function buildTongAnalysisPrompt(input: TongAnalysisInput): {
     .map((f, i) => `  ${i + 1}. ${f}`)
     .join('\n');
 
+  const memoryBlock =
+    input.memory_context && input.memory_context.trim().length > 0
+      ? [
+          '',
+          '【已知长期上下文，仅供参考、不要在分析中直接复述】',
+          input.memory_context.trim(),
+        ]
+      : [];
+
   const user = [
     '请基于以下结构化输入做关系分析：',
     '',
@@ -49,6 +58,7 @@ export function buildTongAnalysisPrompt(input: TongAnalysisInput): {
     '',
     '客观事实（仅基于此推理）：',
     factLines,
+    ...memoryBlock,
     '',
     `需要输出的字段：${input.required_output.join(', ')}`,
     '',

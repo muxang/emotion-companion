@@ -9,12 +9,17 @@ import type {
   MessageRepository,
 } from '../src/db/repositories/messages.js';
 import type { SessionRepository } from '../src/db/repositories/sessions.js';
+import type { MemoryRepository } from '../src/db/repositories/memory.js';
 import type {
   ConversationMode,
+  MemorySummaryDTO,
   MessageDTO,
+  RelationshipEntityDTO,
+  RelationshipEventDTO,
   RiskLevel,
   SessionDTO,
   UserDTO,
+  UserProfileDTO,
 } from '@emotion/shared';
 
 export interface MockState {
@@ -27,6 +32,12 @@ export interface MockState {
   createdSessions: number;
   deletedSessions: number;
   incrementCalls: Array<{ id: string; delta: number }>;
+  // Phase 5 memory state
+  profiles: Map<string, UserProfileDTO>;
+  entities: Map<string, RelationshipEntityDTO[]>;
+  events: Map<string, RelationshipEventDTO[]>;
+  summaries: Map<string, MemorySummaryDTO[]>;
+  memoryDeleteCalls: number;
 }
 
 export function makeMockRepos(): {
@@ -34,6 +45,7 @@ export function makeMockRepos(): {
   users: UserRepository;
   sessions: SessionRepository;
   messages: MessageRepository;
+  memory: MemoryRepository;
 } {
   const state: MockState = {
     usersByAnonymousId: new Map(),
@@ -45,6 +57,11 @@ export function makeMockRepos(): {
     createdSessions: 0,
     deletedSessions: 0,
     incrementCalls: [],
+    profiles: new Map(),
+    entities: new Map(),
+    events: new Map(),
+    summaries: new Map(),
+    memoryDeleteCalls: 0,
   };
 
   let userCounter = 0;
@@ -162,7 +179,154 @@ export function makeMockRepos(): {
     },
   };
 
-  return { state, users, sessions, messages };
+  let entityCounter = 0;
+  let eventCounter = 0;
+  let summaryCounter = 0;
+
+  const memory: MemoryRepository = {
+    async getUserProfile(userId) {
+      return state.profiles.get(userId) ?? null;
+    },
+    async upsertUserProfile(userId, memoryEnabled, input) {
+      if (!memoryEnabled) return null;
+      const now = new Date().toISOString();
+      const existing = state.profiles.get(userId);
+      const merged: UserProfileDTO = {
+        user_id: userId,
+        traits_json: input.traits_json ?? existing?.traits_json ?? {},
+        attachment_style:
+          input.attachment_style ?? existing?.attachment_style ?? null,
+        boundary_preferences:
+          input.boundary_preferences ?? existing?.boundary_preferences ?? {},
+        common_triggers:
+          input.common_triggers ?? existing?.common_triggers ?? [],
+        updated_at: now,
+      };
+      state.profiles.set(userId, merged);
+      return merged;
+    },
+    async getRelationshipEntities(userId) {
+      return state.entities.get(userId) ?? [];
+    },
+    async createRelationshipEntity(memoryEnabled, input) {
+      if (!memoryEnabled) return null;
+      entityCounter++;
+      const id = `e0000000-0000-0000-0000-${String(entityCounter).padStart(12, '0')}`;
+      const now = new Date().toISOString();
+      const ent: RelationshipEntityDTO = {
+        id,
+        user_id: input.user_id,
+        label: input.label,
+        relation_type: input.relation_type ?? null,
+        notes: input.notes ?? null,
+        created_at: now,
+        updated_at: now,
+      };
+      const arr = state.entities.get(input.user_id) ?? [];
+      arr.push(ent);
+      state.entities.set(input.user_id, arr);
+      return ent;
+    },
+    async getRelationshipEvents(userId, limit = 10) {
+      const all = state.events.get(userId) ?? [];
+      return all.slice(0, limit);
+    },
+    async createRelationshipEvent(memoryEnabled, input) {
+      if (!memoryEnabled) return null;
+      eventCounter++;
+      const id = `f0000000-0000-0000-0000-${String(eventCounter).padStart(12, '0')}`;
+      const now = new Date().toISOString();
+      const ev: RelationshipEventDTO = {
+        id,
+        user_id: input.user_id,
+        entity_id: input.entity_id ?? null,
+        event_type: input.event_type,
+        event_time:
+          input.event_time instanceof Date
+            ? input.event_time.toISOString()
+            : (input.event_time as string | null) ?? null,
+        summary: input.summary,
+        evidence_json: input.evidence_json ?? [],
+        created_at: now,
+      };
+      const arr = state.events.get(input.user_id) ?? [];
+      arr.unshift(ev);
+      state.events.set(input.user_id, arr);
+      return ev;
+    },
+    async getMemorySummaries(userId, _summaryType, limit = 3) {
+      const all = state.summaries.get(userId) ?? [];
+      return all.slice(0, limit);
+    },
+    async createMemorySummary(memoryEnabled, input) {
+      if (!memoryEnabled) return null;
+      summaryCounter++;
+      const id = `a0000000-0000-0000-0000-${String(summaryCounter).padStart(12, '0')}`;
+      const sum: MemorySummaryDTO = {
+        id,
+        user_id: input.user_id,
+        session_id: input.session_id ?? null,
+        summary_type: input.summary_type,
+        summary_text: input.summary_text,
+        created_at: new Date().toISOString(),
+      };
+      const arr = state.summaries.get(input.user_id) ?? [];
+      arr.unshift(sum);
+      state.summaries.set(input.user_id, arr);
+      return sum;
+    },
+    async deleteOrAnonymizeUserMemory(userId) {
+      state.memoryDeleteCalls++;
+      const summaries = state.summaries.get(userId) ?? [];
+      const summariesDeleted = summaries.length;
+      state.summaries.delete(userId);
+
+      const profile = state.profiles.get(userId);
+      const profileAnonymized = !!profile;
+      if (profile) {
+        state.profiles.set(userId, {
+          ...profile,
+          traits_json: {},
+          attachment_style: null,
+          boundary_preferences: {},
+          common_triggers: [],
+          updated_at: new Date().toISOString(),
+        });
+      }
+
+      const entities = state.entities.get(userId) ?? [];
+      const entitiesAnonymized = entities.length;
+      state.entities.set(
+        userId,
+        entities.map((e) => ({
+          ...e,
+          label: '[已删除]',
+          relation_type: null,
+          notes: null,
+        }))
+      );
+
+      const events = state.events.get(userId) ?? [];
+      const eventsAnonymized = events.length;
+      state.events.set(
+        userId,
+        events.map((e) => ({
+          ...e,
+          summary: '[已删除]',
+          evidence_json: [],
+        }))
+      );
+
+      return {
+        summariesDeleted,
+        profileAnonymized,
+        entitiesAnonymized,
+        eventsAnonymized,
+      };
+    },
+  };
+
+  return { state, users, sessions, messages, memory };
 }
 
 // ============================================================
@@ -277,6 +441,7 @@ export async function buildTestApp(
       users: mocks.users,
       sessions: mocks.sessions,
       messages: mocks.messages,
+      memory: mocks.memory,
     },
     aiClient,
   });

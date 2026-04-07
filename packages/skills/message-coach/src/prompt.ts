@@ -61,6 +61,13 @@ export function buildMessageCoachPrompt(input: MessageCoachInput): {
   if (input.draft) {
     lines.push(`用户已有草稿（仅供参考，可改写）：${input.draft}`);
   }
+  if (input.memory_context && input.memory_context.trim().length > 0) {
+    lines.push(
+      '',
+      '【已知长期上下文，仅供参考、不要在话术中直接复述】',
+      input.memory_context.trim()
+    );
+  }
   lines.push('', '请严格输出 JSON：');
 
   return { system: SYSTEM_PROMPT, user: lines.join('\n') };

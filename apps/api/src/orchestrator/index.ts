@@ -55,6 +55,14 @@ import type {
   OrchestratorInput,
   OrchestratorMeta,
 } from './types.js';
+import type { UserMemory } from '@emotion/shared';
+
+const EMPTY_MEMORY: UserMemory = {
+  profile: null,
+  entities: [],
+  recentSummaries: [],
+  recentEvents: [],
+};
 
 const HISTORY_LIMIT = 6;
 
@@ -125,6 +133,30 @@ export async function* orchestrate(
     last_assistant_risk: lastAssistantRisk,
   });
 
+  // ---------- Step 5: 注入长期记忆 ----------
+  // 仅在非 safety 模式 + memory_enabled=true + memory deps 存在时拉记忆
+  // 失败仅记 warn，不阻塞主流程
+  let memoryContext = '';
+  const memoryEnabled = deps.user?.memory_enabled === true;
+  if (
+    decision.mode !== 'safety' &&
+    memoryEnabled &&
+    deps.memory &&
+    deps.user
+  ) {
+    try {
+      const memory: UserMemory = await deps.memory.getUserMemory(
+        deps.user.id,
+        memoryEnabled
+      );
+      memoryContext = deps.memory.formatMemoryContext(memory);
+    } catch (err) {
+      log.warn({ err, requestId }, 'memory fetch failed');
+      memoryContext = '';
+    }
+  }
+  void EMPTY_MEMORY;
+
   // ---------- Analysis 预运行 ----------
   // 非流式：先跑一次拿结构化结果，便于：
   //   1. 把 BlockedByRiskError 在 yield meta 之前转成 safety 兜底（第二道防线）
@@ -136,6 +168,7 @@ export async function* orchestrate(
   if (decision.mode === 'analysis') {
     try {
       const tongInput = buildAnalysisInputFromIntake(intake, input.user_text);
+      if (memoryContext) tongInput.memory_context = memoryContext;
       const result = await runTongAnalysis(tongInput, {
         ai: deps.ai,
         risk_level: decision.effective_risk,
@@ -173,6 +206,7 @@ export async function* orchestrate(
   if (decision.mode === 'coach') {
     try {
       const coachInput = buildCoachInputFromIntake(intake, input.user_text);
+      if (memoryContext) coachInput.memory_context = memoryContext;
       const result = await runMessageCoach(coachInput, {
         ai: deps.ai,
         risk_level: decision.effective_risk,
@@ -284,7 +318,14 @@ export async function* orchestrate(
     if (decision.mode === 'coach') {
       return regenerateCoach();
     }
-    const stream = pickSkillStream(decision.mode, intake, input, history, deps);
+    const stream = pickSkillStream(
+      decision.mode,
+      intake,
+      input,
+      history,
+      deps,
+      memoryContext
+    );
     return collectStream(stream, deps.signal);
   };
 
@@ -384,6 +425,32 @@ export async function* orchestrate(
       // 计数 +2（user + assistant）；user 未写时只 +1
       const delta = userWritten ? 2 : 1;
       await deps.repos.sessions.incrementMessageCount(input.session_id, delta);
+
+      // ---------- Phase 5: fire-and-forget 异步记忆任务 ----------
+      // 双重门禁：memory_enabled + 风险 < high + memory deps 存在
+      // 失败仅 warn，不影响响应；不 await
+      if (
+        deps.memory &&
+        deps.user &&
+        memoryEnabled &&
+        decision.effective_risk !== 'high' &&
+        decision.effective_risk !== 'critical' &&
+        decision.mode !== 'safety'
+      ) {
+        const userId = deps.user.id;
+        const sessionId = input.session_id;
+        const mem = deps.memory;
+        void mem
+          .generateSessionSummary(sessionId, userId, true)
+          .catch((err: unknown) =>
+            log.warn({ err, requestId }, 'memory.generateSessionSummary failed')
+          );
+        void mem
+          .extractAndSaveEntities(sessionId, userId, true)
+          .catch((err: unknown) =>
+            log.warn({ err, requestId }, 'memory.extractAndSaveEntities failed')
+          );
+      }
     } catch (err) {
       log.error({ err, requestId }, 'failed to persist assistant message');
     }
@@ -422,7 +489,8 @@ function pickSkillStream(
   intake: IntakeResult,
   input: OrchestratorInput,
   history: Array<{ role: 'user' | 'assistant'; content: string }>,
-  deps: OrchestratorDeps
+  deps: OrchestratorDeps,
+  memoryContext: string
 ): AsyncIterable<string> {
   if (mode === 'companion') {
     return runCompanionResponse(
@@ -431,6 +499,7 @@ function pickSkillStream(
         emotion_state: intake.emotion_state,
         intake,
         recent_history: history,
+        ...(memoryContext ? { memory_context: memoryContext } : {}),
       },
       { ai: deps.ai, signal: deps.signal }
     );

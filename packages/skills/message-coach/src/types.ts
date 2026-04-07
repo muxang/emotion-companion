@@ -15,6 +15,8 @@ export interface MessageCoachInput {
   user_goal: string;
   relationship_stage?: string;
   draft?: string;
+  /** Phase 5：长期记忆上下文，由 orchestrator 注入；空字符串表示无 */
+  memory_context?: string;
 }
 
 export type MessageCoachOutput = MessageCoachResult;

@@ -81,6 +81,9 @@ export async function chatStreamRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
+      // Phase 5：拉用户记录，拿到 memory_enabled 开关供 orchestrator Step 5 / 异步任务用
+      const userRecord = await app.repos.users.findById(userId);
+
       const requestId = newRequestId();
       const env = loadEnv();
       request.log.info(
@@ -148,6 +151,15 @@ export async function chatStreamRoutes(app: FastifyInstance): Promise<void> {
             logger: request.log,
             intakeTimeoutMs: env.INTAKE_TIMEOUT_MS,
             requestId,
+            ...(userRecord
+              ? {
+                  user: {
+                    id: userRecord.id,
+                    memory_enabled: userRecord.memory_enabled,
+                  },
+                }
+              : {}),
+            ...(app.memoryDeps ? { memory: app.memoryDeps } : {}),
           }
         );
 

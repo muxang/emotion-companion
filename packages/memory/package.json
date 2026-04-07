@@ -13,9 +13,12 @@
     "lint:fix": "eslint \"src/**/*.ts\" --fix"
   },
   "dependencies": {
-    "@emotion/shared": "workspace:*"
+    "@emotion/shared": "workspace:*",
+    "@emotion/core-ai": "workspace:*"
   },
   "devDependencies": {
+    "@types/pg": "^8.11.5",
+    "pg": "^8.11.5",
     "typescript": "^5.4.5",
     "vitest": "^1.6.0"
   }

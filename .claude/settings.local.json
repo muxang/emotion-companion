@@ -21,7 +21,9 @@
       "Bash(pnpm --filter @emotion/api --filter @emotion/skill-tong-analysis --filter @emotion/shared run test)",
       "Bash(pnpm --filter @emotion/web run typecheck)",
       "Bash(pnpm --filter @emotion/web --filter @emotion/api run test)",
-      "Bash(pnpm --filter @emotion/web run test)"
+      "Bash(pnpm --filter @emotion/web run test)",
+      "Bash(rm:*)",
+      "Bash(pnpm --filter @emotion/memory run test)"
     ]
   }
 }

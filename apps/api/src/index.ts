@@ -1,10 +1,18 @@
 import { AIClient } from '@emotion/core-ai';
+import {
+  extractAndSaveEntities,
+  formatMemoryContext,
+  generateSessionSummary,
+  getUserMemory,
+} from '@emotion/memory';
 import { buildApp } from './app.js';
 import { loadEnv } from './config/env.js';
 import { getPool, closePool } from './db/pool.js';
 import { createUserRepository } from './db/repositories/users.js';
 import { createSessionRepository } from './db/repositories/sessions.js';
 import { createMessageRepository } from './db/repositories/messages.js';
+import { createMemoryRepository } from './db/repositories/memory.js';
+import type { OrchestratorMemoryDeps } from './orchestrator/types.js';
 
 async function bootstrap(): Promise<void> {
   const env = loadEnv();
@@ -17,13 +25,26 @@ async function bootstrap(): Promise<void> {
     ...(env.ANTHROPIC_BASE_URL ? { baseURL: env.ANTHROPIC_BASE_URL } : {}),
   });
 
+  // Phase 5：记忆依赖闭包（packages/memory 直接持有 pool + ai）
+  const memoryDeps: OrchestratorMemoryDeps = {
+    getUserMemory: (userId, memoryEnabled) =>
+      getUserMemory(pool, userId, memoryEnabled),
+    generateSessionSummary: (sessionId, userId, memoryEnabled) =>
+      generateSessionSummary({ pool, ai: aiClient }, sessionId, userId, memoryEnabled),
+    extractAndSaveEntities: (sessionId, userId, memoryEnabled) =>
+      extractAndSaveEntities({ pool, ai: aiClient }, sessionId, userId, memoryEnabled),
+    formatMemoryContext,
+  };
+
   const app = await buildApp({
     repos: {
       users: createUserRepository(pool),
       sessions: createSessionRepository(pool),
       messages: createMessageRepository(pool),
+      memory: createMemoryRepository(pool),
     },
     aiClient,
+    memoryDeps,
   });
 
   const shutdown = async (signal: string): Promise<void> => {
