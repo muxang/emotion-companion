@@ -19,9 +19,14 @@ import {
 } from '@emotion/skill-emotion-intake';
 import { runCompanionResponse } from '@emotion/skill-companion-response';
 import { runSafetyTriage } from '@emotion/skill-safety-triage';
+import {
+  BlockedByRiskError,
+  runTongAnalysis,
+} from '@emotion/skill-tong-analysis';
 import { collectStream } from '@emotion/core-ai';
 import { classifyByKeywords } from '@emotion/safety';
 import type {
+  AnalysisResult,
   ConversationMode,
   IntakeResult,
   RiskLevel,
@@ -30,6 +35,10 @@ import { decideMode } from './router.js';
 import { placeholderStream } from './placeholder.js';
 import { replayChunks } from './replay.js';
 import { runGuardWithRetry } from './guard-runner.js';
+import {
+  buildAnalysisInputFromIntake,
+  formatAnalysisText,
+} from './analysis-input.js';
 import type {
   IntakeResultPublic,
   OrchestratorDeps,
@@ -101,11 +110,51 @@ export async function* orchestrate(
     log.warn({ err, requestId }, 'lastAssistantRisk fetch failed');
   }
 
-  const decision = decideMode({
+  let decision = decideMode({
     intake,
     keyword_risk: keywordRisk,
     last_assistant_risk: lastAssistantRisk,
   });
+
+  // ---------- Analysis 预运行 ----------
+  // 非流式：先跑一次拿结构化结果，便于：
+  //   1. 把 BlockedByRiskError 在 yield meta 之前转成 safety 兜底（第二道防线）
+  //   2. 把结构化 JSON 写入 messages.structured_json
+  let analysisStructured: AnalysisResult | null = null;
+  let analysisInitialText: string | null = null;
+  if (decision.mode === 'analysis') {
+    try {
+      const tongInput = buildAnalysisInputFromIntake(intake, input.user_text);
+      const result = await runTongAnalysis(tongInput, {
+        ai: deps.ai,
+        risk_level: decision.effective_risk,
+        signal: deps.signal,
+        timeoutMs: deps.intakeTimeoutMs,
+      });
+      analysisStructured = result;
+      analysisInitialText = formatAnalysisText(result.analysis, result.advice);
+    } catch (err) {
+      if (err instanceof BlockedByRiskError) {
+        // 第二道防线触发：orchestrator 路由层应已拦截，但仍降级到 safety
+        log.warn(
+          { requestId, risk_level: err.risk_level },
+          'tong-analysis blocked by second-line guard, falling back to safety'
+        );
+        decision = {
+          mode: 'safety',
+          effective_risk: decision.effective_risk,
+          reason: 'tong_analysis_blocked_fallback',
+        };
+      } else if (deps.signal.aborted) {
+        log.info({ requestId }, 'analysis aborted before meta');
+        yield { type: 'error', code: 'ABORTED', message: '请求已中止' };
+        return;
+      } else {
+        // 其他异常：记录后让下游 collectStream 阶段拿到 null → 走兜底文案
+        log.error({ err, requestId }, 'tong-analysis unexpected error');
+      }
+    }
+  }
 
   log.info(
     {
@@ -144,7 +193,29 @@ export async function* orchestrate(
   let firstText = '';
   let secondTextHolder: { value: string } | null = null;
 
+  // analysis 模式的 regenerate：重新跑 runTongAnalysis 并刷新 structured 结果
+  const regenerateAnalysis = async (): Promise<string> => {
+    const tongInput = buildAnalysisInputFromIntake(intake, input.user_text);
+    try {
+      const result = await runTongAnalysis(tongInput, {
+        ai: deps.ai,
+        risk_level: decision.effective_risk,
+        signal: deps.signal,
+        timeoutMs: deps.intakeTimeoutMs,
+      });
+      analysisStructured = result;
+      return formatAnalysisText(result.analysis, result.advice);
+    } catch (err) {
+      // 二次失败时不再切 safety（meta 已发出），回退到一段克制的兜底
+      log.warn({ err, requestId }, 'tong-analysis regenerate failed');
+      return '我没有办法基于现有信息给出足够稳的分析。可以把最近一次让你最在意的具体事件再说说，我们一起从那里看。';
+    }
+  };
+
   const runOnce = async (): Promise<string> => {
+    if (decision.mode === 'analysis') {
+      return regenerateAnalysis();
+    }
     const stream = pickSkillStream(decision.mode, intake, input, history, deps);
     return collectStream(stream, deps.signal);
   };
@@ -154,6 +225,10 @@ export async function* orchestrate(
       // safety 走规则，不进 guard / retry
       const triage = runSafetyTriage({ user_text: input.user_text });
       firstText = await collectStream(triage.stream, deps.signal);
+    } else if (decision.mode === 'analysis') {
+      // 已在预运行阶段拿到 firstText；若预运行失败（非 Blocked）则现在补跑一次
+      firstText =
+        analysisInitialText ?? (await regenerateAnalysis());
     } else {
       firstText = await runOnce();
     }
@@ -228,6 +303,9 @@ export async function* orchestrate(
         content: finalText,
         risk_level: decision.effective_risk,
         intake_result: intakeForDb,
+        structured_json: analysisStructured
+          ? (analysisStructured as unknown as Record<string, unknown>)
+          : null,
       });
       // 计数 +2（user + assistant）；user 未写时只 +1
       const delta = userWritten ? 2 : 1;
