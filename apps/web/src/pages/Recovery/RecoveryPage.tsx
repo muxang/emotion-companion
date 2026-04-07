@@ -15,13 +15,13 @@ const PLAN_OPTIONS: Array<{
   totalDays: number;
 }> = [
   {
-    type: '7-day-breakup',
+    type: '7day-breakup',
     title: '7天走出失恋',
     description: '适合刚分手、反复联系的情况',
     totalDays: 7,
   },
   {
-    type: '14-day-overthinking',
+    type: '14day-rumination',
     title: '14天停止内耗',
     description: '适合暧昧期、反复纠结的情况',
     totalDays: 14,
@@ -29,8 +29,8 @@ const PLAN_OPTIONS: Array<{
 ];
 
 const PLAN_TITLE: Record<string, string> = {
-  '7-day-breakup': '7天走出失恋',
-  '14-day-overthinking': '14天停止内耗',
+  '7day-breakup': '7天走出失恋',
+  '14day-rumination': '14天停止内耗',
 };
 
 function planTitle(plan: RecoveryPlan): string {
@@ -83,8 +83,21 @@ export function RecoveryPage(): JSX.Element {
   }, [currentPlan?.id]);
 
   const todayCheckin: RecoveryCheckin | null = useMemo(() => {
+    // 1) 本次会话刚提交过 → 立刻锁住按钮，防止 React 状态延迟引起的重复点击
     if (justSubmittedCheckin) return justSubmittedCheckin;
     if (!currentPlan) return null;
+
+    // 2) 后端打卡成功后会把 current_day 推进一格，所以"刚完成的那一天" = current_day - 1。
+    //    在 checkins 列表里查 day_index === current_day - 1 且 completed=true。
+    const justFinishedDayIndex = currentPlan.current_day - 1;
+    if (justFinishedDayIndex >= 1) {
+      const fromAdvance = checkins.find(
+        (c) => c.day_index === justFinishedDayIndex && c.completed
+      );
+      if (fromAdvance) return fromAdvance;
+    }
+
+    // 3) 兜底：服务端因故未推进时（极少见），按 current_day 本身查一次。
     return (
       checkins.find(
         (c) => c.day_index === currentPlan.current_day && c.completed
@@ -108,7 +121,8 @@ export function RecoveryPage(): JSX.Element {
   };
 
   const handleSubmitCheckin = async (): Promise<void> => {
-    if (!currentPlan || todayCheckin) return;
+    // 三重防御：1) 已打卡 2) 提交中 3) 没有当前计划
+    if (!currentPlan || todayCheckin || submitting) return;
     setSubmitting(true);
     try {
       const created = await submitCheckin(currentPlan.id, {
@@ -119,6 +133,8 @@ export function RecoveryPage(): JSX.Element {
         setJustSubmittedCheckin(created);
         setReflection('');
       }
+      // 失败（包括 409）时 store 已自动 fetchDetail 同步状态，
+      // 下一次渲染会通过 todayCheckin 兜底逻辑显示"已完成"。
     } finally {
       setSubmitting(false);
     }
@@ -273,7 +289,12 @@ export function RecoveryPage(): JSX.Element {
                   className="rounded-lg border border-warm-100 bg-warm-50 p-4 text-sm text-warm-700"
                   data-testid="recovery-checkin-done"
                 >
-                  ✔ 今日已打卡(心情 {todayCheckin.mood_score ?? '-'} / 10)
+                  今日已完成 ✓（心情 {todayCheckin.mood_score ?? '-'} / 10）
+                  {todayCheckin.reflection ? (
+                    <p className="mt-2 whitespace-pre-wrap text-xs text-warm-700/70">
+                      {todayCheckin.reflection}
+                    </p>
+                  ) : null}
                 </div>
               ) : (
                 <div className="flex flex-col gap-3">

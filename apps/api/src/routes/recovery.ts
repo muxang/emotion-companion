@@ -148,15 +148,32 @@ export async function recoveryRoutes(app: FastifyInstance): Promise<void> {
         );
     }
 
+    // day_index 由后端决定（plan.current_day），不接受前端传入，防止越权打其他天
+    const dayIndex = plan.current_day;
+
     const result = await app.repos.recovery.completeCheckin(
       plan.id,
       userId,
-      plan.current_day,
+      dayIndex,
       bodyParsed.data.reflection ?? null,
       bodyParsed.data.mood_score ?? null
     );
     if (!result) {
       return reply.code(404).send(fail('NOT_FOUND', '恢复计划不存在'));
+    }
+
+    // 幂等：当日已打卡，返回 409
+    if (result.already_done) {
+      request.log.info(
+        { userId, plan_id: plan.id, day_index: dayIndex },
+        'recovery checkin: already done, returning 409'
+      );
+      return reply.code(409).send(
+        fail('ALREADY_CHECKED_IN', '今日已打卡', {
+          day_index: dayIndex,
+          checkin: result.checkin,
+        })
+      );
     }
 
     return reply.send(

@@ -328,34 +328,32 @@ export function createMemoryRepository(pool: Pool): MemoryRepository {
       try {
         await client.query('BEGIN');
 
+        // 1) 真删除会话摘要
         const sumRes = await client.query(
           `DELETE FROM memory_summaries WHERE user_id = $1`,
           [userId]
         );
 
+        // 2) 真删除关系事件（先删，避免 FK 约束阻塞 entity 删除）
+        const evtRes = await client.query(
+          `DELETE FROM relationship_events WHERE user_id = $1`,
+          [userId]
+        );
+
+        // 3) 真删除关系对象
+        const entRes = await client.query(
+          `DELETE FROM relationship_entities WHERE user_id = $1`,
+          [userId]
+        );
+
+        // 4) user_profiles 仍然保留行（保护 PK 与 user 关联完整性），
+        //    只清空所有可识别画像字段
         const profRes = await client.query(
           `UPDATE user_profiles
              SET traits_json          = '{}'::jsonb,
                  attachment_style     = NULL,
                  boundary_preferences = '{}'::jsonb,
                  common_triggers      = ARRAY[]::TEXT[]
-           WHERE user_id = $1`,
-          [userId]
-        );
-
-        const entRes = await client.query(
-          `UPDATE relationship_entities
-             SET label = '[已删除]',
-                 relation_type = NULL,
-                 notes = NULL
-           WHERE user_id = $1`,
-          [userId]
-        );
-
-        const evtRes = await client.query(
-          `UPDATE relationship_events
-             SET summary = '[已删除]',
-                 evidence_json = '[]'::jsonb
            WHERE user_id = $1`,
           [userId]
         );

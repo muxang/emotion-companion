@@ -322,28 +322,14 @@ export function makeMockRepos(): {
         });
       }
 
-      const entities = state.entities.get(userId) ?? [];
-      const entitiesAnonymized = entities.length;
-      state.entities.set(
-        userId,
-        entities.map((e) => ({
-          ...e,
-          label: '[已删除]',
-          relation_type: null,
-          notes: null,
-        }))
-      );
-
+      // 真删除关系事件与关系对象（与生产实现一致；用户期望清除后看不到任何记录）
       const events = state.events.get(userId) ?? [];
       const eventsAnonymized = events.length;
-      state.events.set(
-        userId,
-        events.map((e) => ({
-          ...e,
-          summary: '[已删除]',
-          evidence_json: [],
-        }))
-      );
+      state.events.delete(userId);
+
+      const entities = state.entities.get(userId) ?? [];
+      const entitiesAnonymized = entities.length;
+      state.entities.delete(userId);
 
       return {
         summariesDeleted,
@@ -444,10 +430,21 @@ export function makeMockRepos(): {
       if (!plan || plan.user_id !== userId) return null;
 
       const arr = state.recoveryCheckins.get(planId) ?? [];
-      let checkin = arr.find((c) => c.day_index === dayIndex);
-      if (checkin) {
+      const existing = arr.find((c) => c.day_index === dayIndex);
+
+      // 幂等：已 completed 的同一 day_index 直接返回，不推进 current_day
+      if (existing && existing.completed) {
+        return {
+          checkin: existing,
+          plan,
+          already_done: true,
+        };
+      }
+
+      let checkin: RecoveryCheckinDTO;
+      if (existing) {
         checkin = {
-          ...checkin,
+          ...existing,
           completed: true,
           reflection,
           mood_score: moodScore,
@@ -480,7 +477,7 @@ export function makeMockRepos(): {
       };
       state.recoveryPlans.set(planId, updatedPlan);
 
-      return { checkin, plan: updatedPlan };
+      return { checkin, plan: updatedPlan, already_done: false };
     },
   };
 

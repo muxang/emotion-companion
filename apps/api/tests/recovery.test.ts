@@ -169,6 +169,38 @@ describe('Recovery plans routes', () => {
     expect(body.data.today_task).toBeNull();
   });
 
+  it('幂等：同一 day_index 重复打卡返回 already_done=true 且不再推进 current_day', async () => {
+    const token = await login('anon-recovery-idempotent');
+    const plan = await createPlan(token, '7day-breakup');
+
+    // 第一次打卡：current_day 1 → 2
+    const first = await app.inject({
+      method: 'POST',
+      url: `/api/recovery-plans/${plan.id}/checkin`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { mood_score: 6 },
+    });
+    expect(first.statusCode).toBe(200);
+    const firstBody = first.json() as {
+      data: { plan: RecoveryPlanDTO; checkin: RecoveryCheckinDTO };
+    };
+    expect(firstBody.data.plan.current_day).toBe(2);
+    expect(firstBody.data.checkin.day_index).toBe(1);
+
+    // 直接对 repo 重发同一 day_index=1，应触发幂等
+    const second = await app.repos.recovery.completeCheckin(
+      plan.id,
+      firstBody.data.plan.user_id,
+      1,
+      '再试一次',
+      8
+    );
+    expect(second).not.toBeNull();
+    expect(second!.already_done).toBe(true);
+    expect(second!.plan.current_day).toBe(2); // 没推进
+    expect(second!.checkin.mood_score).toBe(6); // 仍是首次的值
+  });
+
   it('rejects checkin on a non-active plan with 409', async () => {
     const token = await login('anon-recovery-409');
     const plan = await createPlan(token, '7day-breakup');

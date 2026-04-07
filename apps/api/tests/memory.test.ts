@@ -68,7 +68,7 @@ describe('POST /api/memory/delete', () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it('删除 summaries 并匿名化 entities/events', async () => {
+  it('真删除 summaries / entities / events，user_profile 字段被清空', async () => {
     const { token, userId } = await login('anon-mem-delete-1');
 
     await app.repos.memory.createMemorySummary(true, {
@@ -108,12 +108,10 @@ describe('POST /api/memory/delete', () => {
     expect(body.data.deleted.entitiesAnonymized).toBe(1);
     expect(body.data.deleted.eventsAnonymized).toBe(1);
 
-    // mock state：summaries 应已清空，events/entities 应被改写为 [已删除]
+    // mock state：summaries / entities / events 全部被真删除
     expect(state.summaries.get(userId) ?? []).toEqual([]);
-    const entities = state.entities.get(userId) ?? [];
-    expect(entities[0]!.label).toBe('[已删除]');
-    const events = state.events.get(userId) ?? [];
-    expect(events[0]!.summary).toBe('[已删除]');
+    expect(state.entities.get(userId) ?? []).toEqual([]);
+    expect(state.events.get(userId) ?? []).toEqual([]);
     expect(state.memoryDeleteCalls).toBe(1);
   });
 });

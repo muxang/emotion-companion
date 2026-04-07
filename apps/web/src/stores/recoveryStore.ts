@@ -113,10 +113,18 @@ export const useRecoveryStore = create<RecoveryState>((set, get) => ({
         status: 'success',
         error: null,
       }));
-      // 拉取最新进度（current_day 可能已变化）
+      // 拉取最新进度（current_day 已经在后端推进一格）
       await get().fetchDetail(id);
       return checkin;
     } catch (err) {
+      // 即使失败（包括 409 ALREADY_CHECKED_IN）也重新拉取详情，
+      // 保证页面状态和服务端一致：服务端已经把 current_day / checkins 推进的话，
+      // 前端应同步看到「今日已完成」。
+      try {
+        await get().fetchDetail(id);
+      } catch {
+        /* ignore secondary fetch failure */
+      }
       set({
         status: 'error',
         error: err instanceof Error ? err.message : '打卡失败,请稍后再试',

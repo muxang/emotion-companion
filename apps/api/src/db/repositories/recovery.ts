@@ -68,6 +68,11 @@ const PLAN_TOTAL_DAYS: Record<RecoveryPlanType, number> = {
 export interface CompleteCheckinResult {
   checkin: RecoveryCheckinDTO;
   plan: RecoveryPlanDTO;
+  /**
+   * 幂等标记：当 (plan_id, day_index) 已经存在 completed=true 的 checkin 时为 true。
+   * 此时不会重复 upsert，也不会推进 current_day。route 层据此返回 409。
+   */
+  already_done: boolean;
 }
 
 export interface RecoveryRepository {
@@ -202,7 +207,7 @@ export function createRecoveryRepository(pool: Pool): RecoveryRepository {
       try {
         await client.query('BEGIN');
 
-        // 校验归属并锁住该 plan 行
+        // 校验归属并锁住该 plan 行（避免并发请求各自看到旧的 current_day）
         const planRes = await client.query<RecoveryPlanRow>(
           `SELECT * FROM recovery_plans
            WHERE id = $1 AND user_id = $2
@@ -215,7 +220,25 @@ export function createRecoveryRepository(pool: Pool): RecoveryRepository {
           return null;
         }
 
-        // upsert checkin（同一天再次打卡 = 更新）
+        // 幂等保护：先看 (plan_id, day_index) 是否已 completed
+        const existingRes = await client.query<RecoveryCheckinRow>(
+          `SELECT * FROM recovery_checkins
+           WHERE plan_id = $1 AND day_index = $2
+           LIMIT 1`,
+          [planId, dayIndex]
+        );
+        const existingRow = existingRes.rows[0];
+        if (existingRow && existingRow.completed) {
+          // 已打过卡：不再 upsert，不再推进 current_day，原样返回
+          await client.query('COMMIT');
+          return {
+            checkin: checkinToDTO(existingRow),
+            plan: planToDTO(planRow),
+            already_done: true,
+          };
+        }
+
+        // 首次打卡（或之前是占位 completed=false）：upsert 为 completed=true
         const checkinRes = await client.query<RecoveryCheckinRow>(
           `INSERT INTO recovery_checkins
              (plan_id, day_index, completed, reflection, mood_score)
@@ -233,7 +256,7 @@ export function createRecoveryRepository(pool: Pool): RecoveryRepository {
           throw new Error('completeCheckin: checkin upsert returned no row');
         }
 
-        // 推进 current_day；若超出 total_days，则置 completed
+        // 仅在首次打卡时推进 current_day；若超出 total_days，则置 completed
         const nextDay = planRow.current_day + 1;
         const nextStatus =
           nextDay > planRow.total_days ? 'completed' : planRow.status;
@@ -254,6 +277,7 @@ export function createRecoveryRepository(pool: Pool): RecoveryRepository {
         return {
           checkin: checkinToDTO(checkinRow),
           plan: planToDTO(updatedPlanRow),
+          already_done: false,
         };
       } catch (err) {
         await client.query('ROLLBACK').catch(() => undefined);

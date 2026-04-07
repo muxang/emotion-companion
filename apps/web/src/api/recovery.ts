@@ -4,7 +4,7 @@ import { fetchJson } from './client.js';
  * 恢复计划 DTO（Phase 6）。
  * 后端契约见 CLAUDE.md §12.1：/api/recovery-plans 系列接口。
  */
-export type RecoveryPlanType = '7-day-breakup' | '14-day-overthinking' | string;
+export type RecoveryPlanType = '7day-breakup' | '14day-rumination' | string;
 export type RecoveryPlanStatus = 'active' | 'completed' | 'abandoned' | string;
 
 export interface RecoveryPlan {
