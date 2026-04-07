@@ -25,11 +25,10 @@
       "Bash(pnpm typecheck:*)",
       "Bash(pnpm --filter @emotion/web test)",
       "Bash(pnpm exec:*)",
-      "Bash(pnpm --filter @emotion/safety run test)",
-      "Bash(pnpm --filter @emotion/core-ai run test)",
-      "Bash(pnpm --filter @emotion/skill-safety-triage run test)",
-      "Bash(pnpm --filter api run typecheck)",
-      "Bash(git stash:*)"
+      "Bash(mkdir:*)",
+      "Bash(ls:*)",
+      "Bash(git stash:*)",
+      "Bash(pnpm --filter web test)"
     ]
   }
 }

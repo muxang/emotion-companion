@@ -17,6 +17,13 @@ const EnvSchema = z.object({
     .default('true')
     .transform((v) => v === 'true'),
 
+  /** Phase 7：Redis URL，缺省则限流降级为内存 store，不阻塞启动。 */
+  REDIS_URL: z
+    .preprocess(
+      (v) => (v === '' ? undefined : v),
+      z.string().optional()
+    ),
+
   JWT_SECRET: z.string().min(16, 'JWT_SECRET must be at least 16 characters'),
   JWT_EXPIRES_IN: z.string().default('7d'),
   /** 允许过期 token 在该秒数窗口内继续刷新（默认 30 天） */
@@ -54,6 +61,27 @@ export function loadEnv(): Env {
       .join('\n');
     throw new Error(`[env] Invalid environment variables:\n${issues}`);
   }
+
+  // Phase 7 上线检查清单（CLAUDE.md §20）
+  // 生产环境下对关键配置额外校验，避免带默认值或 localhost 上线。
+  if (parsed.data.NODE_ENV === 'production') {
+    const errors: string[] = [];
+    if (!parsed.data.ENABLE_SAFETY_GUARD) {
+      errors.push('ENABLE_SAFETY_GUARD must be true in production');
+    }
+    if (parsed.data.CORS_ORIGIN.includes('localhost')) {
+      errors.push('CORS_ORIGIN must not contain localhost in production');
+    }
+    if (/^(change|default|secret|test|dev)/i.test(parsed.data.JWT_SECRET)) {
+      errors.push('JWT_SECRET looks like a placeholder; set a strong production value');
+    }
+    if (errors.length > 0) {
+      throw new Error(
+        `[env] Production environment check failed:\n${errors.map((e) => `  - ${e}`).join('\n')}`
+      );
+    }
+  }
+
   cached = parsed.data;
   return cached;
 }

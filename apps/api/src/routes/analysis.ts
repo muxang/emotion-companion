@@ -30,7 +30,15 @@ import { extractAnalysisInput } from '../services/extractAnalysisInput.js';
 export async function analysisRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', app.requireAuth);
 
-  app.post('/analysis/relationship', async (request, reply) => {
+  app.post('/analysis/relationship', {
+    // Phase 7：关系分析算力开销高，10 次/分钟
+    config: {
+      rateLimit: {
+        max: 10,
+        timeWindow: '1 minute',
+      },
+    },
+  }, async (request, reply) => {
     const userId = request.userId;
     if (!userId) {
       return reply.code(401).send(fail('UNAUTHORIZED', '未登录'));
@@ -59,6 +67,16 @@ export async function analysisRoutes(app: FastifyInstance): Promise<void> {
       }
       risk_level = r.data;
     }
+
+    // Phase 7：埋点（不含用户原文）
+    app.tracker.track(
+      'analysis_requested',
+      {
+        risk_level,
+        text_length: inputParsed.data.user_text.length,
+      },
+      userId
+    );
 
     // 3. 抽取结构化字段（失败走安全降级，永不抛错）
     const extracted = await extractAnalysisInput(inputParsed.data.user_text, {

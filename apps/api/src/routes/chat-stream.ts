@@ -41,7 +41,16 @@ export function buildSseChunk(
 export async function chatStreamRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     '/chat/stream',
-    { preHandler: [app.requireAuth] },
+    {
+      preHandler: [app.requireAuth],
+      // Phase 7：单路由严格限流（20 次/分钟）
+      config: {
+        rateLimit: {
+          max: 20,
+          timeWindow: '1 minute',
+        },
+      },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const userId = request.userId;
       if (!userId) {
@@ -89,6 +98,17 @@ export async function chatStreamRoutes(app: FastifyInstance): Promise<void> {
       request.log.info(
         { requestId, sessionId: session.id, userId },
         'chat/stream begin (orchestrator, Phase 2)'
+      );
+
+      // Phase 7：用户消息埋点（只记长度，不记原文）
+      app.tracker.track(
+        'chat_message_sent',
+        {
+          session_id: session.id,
+          content_length: parsed.data.content.length,
+          request_id: requestId,
+        },
+        userId
       );
 
       // ---- 接管底层响应 ----
@@ -164,6 +184,7 @@ export async function chatStreamRoutes(app: FastifyInstance): Promise<void> {
                 }
               : {}),
             ...(app.memoryDeps ? { memory: app.memoryDeps } : {}),
+            tracker: app.tracker,
           }
         );
 

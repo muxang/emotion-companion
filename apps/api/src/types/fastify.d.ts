@@ -6,6 +6,7 @@ import type { MessageRepository } from '../db/repositories/messages.js';
 import type { MemoryRepository } from '../db/repositories/memory.js';
 import type { RecoveryRepository } from '../db/repositories/recovery.js';
 import type { OrchestratorMemoryDeps } from '../orchestrator/types.js';
+import type { Tracker } from '@emotion/analytics';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -19,6 +20,8 @@ declare module 'fastify' {
     aiClient: AIClient;
     /** Phase 5: orchestrator 的记忆依赖闭包；测试可注入 mock */
     memoryDeps?: OrchestratorMemoryDeps;
+    /** Phase 7: 埋点 tracker，fire-and-forget */
+    tracker: Tracker;
     requireAuth: import('fastify').preHandlerAsyncHookHandler;
   }
 
