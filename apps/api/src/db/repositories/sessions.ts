@@ -34,6 +34,8 @@ export interface SessionRepository {
   findById(id: string): Promise<SessionDTO | null>;
   create(params: CreateSessionParams): Promise<SessionDTO>;
   delete(id: string, userId: string): Promise<boolean>;
+  /** 原子地把 message_count 增加 delta，并返回更新后的会话 */
+  incrementMessageCount(id: string, delta: number): Promise<SessionDTO | null>;
 }
 
 export function createSessionRepository(pool: Pool): SessionRepository {
@@ -78,6 +80,18 @@ export function createSessionRepository(pool: Pool): SessionRepository {
         [id, userId]
       );
       return (res.rowCount ?? 0) > 0;
+    },
+
+    async incrementMessageCount(id, delta) {
+      const res = await pool.query<SessionRow>(
+        `UPDATE sessions
+         SET message_count = message_count + $2
+         WHERE id = $1
+         RETURNING *`,
+        [id, delta]
+      );
+      const row = res.rows[0];
+      return row ? toDTO(row) : null;
     },
   };
 }

@@ -1,4 +1,5 @@
 import '@fastify/jwt';
+import type { AIClient } from '@emotion/core-ai';
 import type { UserRepository } from '../db/repositories/users.js';
 import type { SessionRepository } from '../db/repositories/sessions.js';
 import type { MessageRepository } from '../db/repositories/messages.js';
@@ -10,6 +11,7 @@ declare module 'fastify' {
       sessions: SessionRepository;
       messages: MessageRepository;
     };
+    aiClient: AIClient;
     requireAuth: import('fastify').preHandlerAsyncHookHandler;
   }
 

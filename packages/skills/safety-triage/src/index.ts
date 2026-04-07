@@ -1,17 +1,33 @@
 /**
- * Safety Triage Skill
+ * Safety Triage Skill - Phase 2 实现
  *
- * 优先级最高。任何 risk_level >= high 时由 orchestrator 强制路由到此 skill。
- * Phase 0：骨架。Phase 2/7 实现完整逻辑。
+ * 同步、不调 AI、关键词级。直接代理到 packages/safety 的 runKeywordTriage。
+ * 返回结构包含两部分：
+ *  - meta：完整 SafetyResponse 结构（orchestrator 用 block_analysis 等字段）
+ *  - stream：把 support_message 包装为 AsyncIterable<string>，统一接口
  */
-export { buildSafetyTriagePrompt } from './prompt.js';
-export { parseSafetyTriageOutput } from './parser.js';
-export type { SafetyTriageInput, SafetyTriageOutput } from './types.js';
+import { runKeywordTriage } from '@emotion/safety';
+import type { SafetyResponse } from '@emotion/shared';
 
-import type { SafetyTriageInput, SafetyTriageOutput } from './types.js';
+export interface SafetyTriageInput {
+  user_text: string;
+}
 
-export async function runSafetyTriage(
-  _input: SafetyTriageInput
-): Promise<SafetyTriageOutput> {
-  throw new Error('runSafetyTriage not implemented (Phase 2/7)');
+export interface SafetyTriageOutput {
+  meta: SafetyResponse;
+  stream: AsyncIterable<string>;
+}
+
+export function runSafetyTriage(input: SafetyTriageInput): SafetyTriageOutput {
+  const meta = runKeywordTriage(input.user_text);
+  return {
+    meta,
+    stream: {
+      async *[Symbol.asyncIterator](): AsyncIterator<string> {
+        if (meta.support_message) {
+          yield meta.support_message;
+        }
+      },
+    },
+  };
 }

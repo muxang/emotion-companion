@@ -1,7 +1,16 @@
 {
   "permissions": {
     "allow": [
-      "Bash(pnpm --filter @emotion/api run test)"
+      "Bash(pnpm --filter @emotion/api run test)",
+      "Bash(pnpm test:*)",
+      "Bash(pnpm --filter @emotion/safety test)",
+      "Bash(pnpm --filter @emotion/skill-emotion-intake test)",
+      "Bash(pnpm --filter @emotion/skill-companion-response test)",
+      "Bash(pnpm --filter @emotion/skill-safety-triage test)",
+      "Bash(tee /tmp/tc.log)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(pnpm -r --stream run typecheck)",
+      "Bash(pnpm -r --stream run test)"
     ]
   }
 }

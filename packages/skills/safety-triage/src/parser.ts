@@ -1,26 +1,7 @@
-import { z } from 'zod';
-import { RiskLevelSchema } from '@emotion/shared';
-import type { SafetyTriageOutput } from './types.js';
-
-const Schema = z.object({
-  risk_level: RiskLevelSchema,
-  safe_mode: z.boolean(),
-  support_message: z.string().min(1),
-  suggest_real_help: z.boolean(),
-  block_analysis: z.boolean(),
-  next_step: z
-    .enum(['pause', 'grounding', 'external_support', 'continue_safe_chat'])
-    .optional(),
-});
-
-export function parseSafetyTriageOutput(raw: string): SafetyTriageOutput {
-  let json: unknown;
-  try {
-    json = JSON.parse(raw);
-  } catch (err) {
-    throw new Error(
-      `safety-triage parser: invalid JSON: ${(err as Error).message}`
-    );
-  }
-  return Schema.parse(json);
-}
+/**
+ * Phase 2 不再需要 parser：safety-triage 是同步关键词流程，
+ * SafetyResponse 直接由 packages/safety/runKeywordTriage 生成。
+ *
+ * 文件保留只是为了不破坏历史 import 路径；不再导出任何符号。
+ */
+export {};

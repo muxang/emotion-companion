@@ -1,37 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import {
-  buildSseChunk,
-  mockStreamGenerator,
-} from '../src/routes/chat-stream.js';
+import { buildSseChunk } from '../src/routes/chat-stream.js';
 import { buildTestApp } from './helpers.js';
 import type { FastifyInstance } from 'fastify';
 import type { SessionDTO } from '@emotion/shared';
-
-describe('chat-stream mockStreamGenerator (unit)', () => {
-  it('yields characters one by one with the configured delay', async () => {
-    const ac = new AbortController();
-    const out: string[] = [];
-    const start = Date.now();
-    for await (const ch of mockStreamGenerator('abc', 5, ac.signal)) {
-      out.push(ch);
-    }
-    expect(out).toEqual(['a', 'b', 'c']);
-    expect(Date.now() - start).toBeGreaterThanOrEqual(15 - 2);
-  });
-
-  it('stops when signal is aborted mid-stream', async () => {
-    const ac = new AbortController();
-    const out: string[] = [];
-    const promise = (async () => {
-      for await (const ch of mockStreamGenerator('hello-world', 20, ac.signal)) {
-        out.push(ch);
-      }
-    })();
-    setTimeout(() => ac.abort(), 30);
-    await promise;
-    expect(out.length).toBeLessThan('hello-world'.length);
-  });
-});
 
 describe('chat-stream buildSseChunk (unit)', () => {
   it('formats a delta chunk', () => {
@@ -42,6 +13,13 @@ describe('chat-stream buildSseChunk (unit)', () => {
   it('formats a done chunk with metadata', () => {
     const c = buildSseChunk('done', { metadata: { request_id: 'r1' } });
     expect(c).toBe('data: {"type":"done","metadata":{"request_id":"r1"}}\n\n');
+  });
+
+  it('formats a meta chunk', () => {
+    const c = buildSseChunk('meta', { mode: 'safety', risk_level: 'critical' });
+    expect(c).toBe(
+      'data: {"type":"meta","mode":"safety","risk_level":"critical"}\n\n'
+    );
   });
 });
 

@@ -11,3 +11,8 @@ process.env.JWT_EXPIRES_IN = '7d';
 process.env.JWT_REFRESH_GRACE_SECONDS = '2592000';
 process.env.MAX_REQUESTS_PER_MINUTE = '1000';
 process.env.ENABLE_SAFETY_GUARD = 'true';
+// Phase 2 — 测试用 FakeAIClient，不会真正调 API，但 env 校验需要非空
+process.env.ANTHROPIC_API_KEY = 'test-anthropic-key';
+process.env.AI_MODEL = 'fake-model';
+process.env.AI_MAX_TOKENS = '256';
+process.env.INTAKE_TIMEOUT_MS = '5000';

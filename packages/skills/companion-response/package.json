@@ -13,8 +13,8 @@
     "lint:fix": "eslint \"src/**/*.ts\" --fix"
   },
   "dependencies": {
-    "@emotion/shared": "workspace:*",
-    "zod": "^3.23.8"
+    "@emotion/core-ai": "workspace:*",
+    "@emotion/shared": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.4.5",

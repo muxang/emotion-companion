@@ -27,6 +27,18 @@ const EnvSchema = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((v) => v === 'true'),
+
+  // ---- Phase 2 ----
+  ANTHROPIC_API_KEY: z.string().min(1, 'ANTHROPIC_API_KEY is required'),
+  /** 可选：自定义 Anthropic API 入口（代理 / 中转 / 私有网关）。留空则用官方 https://api.anthropic.com */
+  ANTHROPIC_BASE_URL: z
+    .preprocess(
+      (v) => (v === '' ? undefined : v),
+      z.string().url('ANTHROPIC_BASE_URL must be a valid URL').optional()
+    ),
+  AI_MODEL: z.string().default('claude-sonnet-4-20250514'),
+  AI_MAX_TOKENS: z.coerce.number().int().positive().default(1024),
+  INTAKE_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

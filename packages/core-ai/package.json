@@ -13,6 +13,7 @@
     "lint:fix": "eslint \"src/**/*.ts\" --fix"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.27.3",
     "@emotion/shared": "workspace:*"
   },
   "devDependencies": {

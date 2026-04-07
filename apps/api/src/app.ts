@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
+import type { AIClient } from '@emotion/core-ai';
 import { loadEnv } from './config/env.js';
 import jwtPlugin from './middleware/jwt.js';
 import { registerErrorHandler } from './middleware/error.js';
@@ -18,6 +19,7 @@ export interface BuildAppOptions {
     sessions: SessionRepository;
     messages: MessageRepository;
   };
+  aiClient: AIClient;
 }
 
 /**
@@ -45,8 +47,9 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     timeWindow: '1 minute',
   });
 
-  // 注入 repositories
+  // 注入 repositories 与 AI client
   app.decorate('repos', options.repos);
+  app.decorate('aiClient', options.aiClient);
 
   // JWT + requireAuth
   await app.register(jwtPlugin);

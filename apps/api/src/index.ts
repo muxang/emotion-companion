@@ -1,3 +1,4 @@
+import { AIClient } from '@emotion/core-ai';
 import { buildApp } from './app.js';
 import { loadEnv } from './config/env.js';
 import { getPool, closePool } from './db/pool.js';
@@ -9,12 +10,20 @@ async function bootstrap(): Promise<void> {
   const env = loadEnv();
   const pool = getPool();
 
+  const aiClient = new AIClient({
+    apiKey: env.ANTHROPIC_API_KEY,
+    model: env.AI_MODEL,
+    defaultMaxTokens: env.AI_MAX_TOKENS,
+    ...(env.ANTHROPIC_BASE_URL ? { baseURL: env.ANTHROPIC_BASE_URL } : {}),
+  });
+
   const app = await buildApp({
     repos: {
       users: createUserRepository(pool),
       sessions: createSessionRepository(pool),
       messages: createMessageRepository(pool),
     },
+    aiClient,
   });
 
   const shutdown = async (signal: string): Promise<void> => {
