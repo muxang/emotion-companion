@@ -1,0 +1,25 @@
+{
+  "name": "emotion-companion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "情感陪伴助手 monorepo",
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter \"./apps/*\" run dev",
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "typecheck": "pnpm -r run typecheck",
+    "lint": "pnpm -r run lint",
+    "lint:fix": "pnpm -r run lint:fix",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md,css,html}\""
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "prettier": "^3.2.5",
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=18.18.0",
+    "pnpm": ">=8.15.0"
+  },
+  "packageManager": "pnpm@8.15.5"
+}
