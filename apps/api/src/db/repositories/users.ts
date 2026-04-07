@@ -25,10 +25,19 @@ function toDTO(row: UserRow): UserDTO {
   };
 }
 
+export interface UpdateUserSettingsInput {
+  tone_preference?: 'warm' | 'rational' | 'direct';
+  memory_enabled?: boolean;
+}
+
 export interface UserRepository {
   findByAnonymousId(anonymousId: string): Promise<UserDTO | null>;
   findById(id: string): Promise<UserDTO | null>;
   createWithAnonymousId(anonymousId: string): Promise<UserDTO>;
+  updateSettings(
+    id: string,
+    input: UpdateUserSettingsInput
+  ): Promise<UserDTO | null>;
 }
 
 export function createUserRepository(pool: Pool): UserRepository {
@@ -61,6 +70,37 @@ export function createUserRepository(pool: Pool): UserRepository {
         throw new Error('createWithAnonymousId: insert returned no row');
       }
       return toDTO(row);
+    },
+
+    async updateSettings(id, input) {
+      // 没有任何字段要更新时，直接返回当前用户
+      if (
+        input.tone_preference === undefined &&
+        input.memory_enabled === undefined
+      ) {
+        const cur = await pool.query<UserRow>(
+          'SELECT * FROM users WHERE id = $1 LIMIT 1',
+          [id]
+        );
+        const row = cur.rows[0];
+        return row ? toDTO(row) : null;
+      }
+
+      // 用 COALESCE 跳过未提供的字段
+      const res = await pool.query<UserRow>(
+        `UPDATE users
+           SET tone_preference = COALESCE($2, tone_preference),
+               memory_enabled  = COALESCE($3, memory_enabled)
+         WHERE id = $1
+         RETURNING *`,
+        [
+          id,
+          input.tone_preference ?? null,
+          input.memory_enabled ?? null,
+        ]
+      );
+      const row = res.rows[0];
+      return row ? toDTO(row) : null;
     },
   };
 }

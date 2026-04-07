@@ -16,6 +16,7 @@ import type { MessageRepository } from './db/repositories/messages.js';
 import type { MemoryRepository } from './db/repositories/memory.js';
 import type { OrchestratorMemoryDeps } from './orchestrator/types.js';
 import { memoryRoutes } from './routes/memory.js';
+import { settingsRoutes } from './routes/settings.js';
 
 export interface BuildAppOptions {
   repos: {
@@ -44,6 +45,31 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
 
   registerErrorHandler(app);
 
+  // 覆盖默认 JSON parser，允许空 body：
+  // 浏览器 fetch + Content-Type: application/json 但不带 body 时，
+  // Fastify 默认会抛 "Body cannot be empty when content-type is set to application/json"，
+  // 这对 POST /api/memory/delete 这种"无 body 也合法"的接口不友好。
+  // 把空 body 解析为 undefined，由各路由自己的 Zod 校验决定是否接受。
+  app.addContentTypeParser(
+    'application/json',
+    { parseAs: 'string' },
+    (_request, body, done) => {
+      const text = typeof body === 'string' ? body : '';
+      if (text.trim().length === 0) {
+        done(null, undefined);
+        return;
+      }
+      try {
+        const json: unknown = JSON.parse(text);
+        done(null, json);
+      } catch (err) {
+        const error = err as Error & { statusCode?: number };
+        error.statusCode = 400;
+        done(error, undefined);
+      }
+    }
+  );
+
   await app.register(cors, {
     origin: env.CORS_ORIGIN.split(',').map((s) => s.trim()),
     credentials: true,
@@ -69,6 +95,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(chatStreamRoutes, { prefix: '/api' });
   await app.register(analysisRoutes, { prefix: '/api' });
   await app.register(memoryRoutes, { prefix: '/api' });
+  await app.register(settingsRoutes, { prefix: '/api' });
 
   return app;
 }

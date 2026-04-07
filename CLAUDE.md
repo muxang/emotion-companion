@@ -860,10 +860,10 @@ docker compose -f infra/docker-compose.prod.yml up -d
 |------|------|------|---------|
 | Phase 0：项目初始化 | ✅ 已完成| monorepo 骨架、React+Vite 前端骨架、Fastify 后端骨架、shared、skills 目录、docker compose | 前后端可启动，测试可跑，浏览器能打开页面 |
 | Phase 1：匿名登录与会话 | ✅ 已完成 | anonymous_id 登录、JWT 鉴权、用户/会话/消息表、SSE 流式接口、最简对话页 | 可匿名创建会话并收到流式回复 |
-| Phase 2：情绪路由 | ⬜ 未开始 | emotion-intake skill、对话编排层、模式路由、基础 safety 拦截 | 5 种典型场景路由正确；critical 场景被基础规则拦截 |
-| Phase 3：tong-analysis wrapper | ⬜ 未开始 | 封装分析插件，禁止高风险调用，前端关系分析页 | high risk 场景被正确拦截；分析结果在网页正常展示 |
-| Phase 4：陪伴回复系统 | ⬜ 未开始 | companion-response、message-coach、三种语气层，前端对话页完整体验 | 回复包含 followup_question 与 suggested_action；流式输出正常渲染 |
-| Phase 5：记忆系统 | ⬜ 未开始 | 短期记忆、长期记忆、摘要、事件时间线，前端成长页 | 第二次对话能感知首次提到的关系对象；时间线可查看 |
+| Phase 2：情绪路由 | ✅ 已完成| emotion-intake skill、对话编排层、模式路由、基础 safety 拦截 | 5 种典型场景路由正确；critical 场景被基础规则拦截 |
+| Phase 3：tong-analysis wrapper | ✅ 已完成 | 封装分析插件，禁止高风险调用，前端关系分析页 | high risk 场景被正确拦截；分析结果在网页正常展示 |
+| Phase 4：陪伴回复系统 | ✅ 已完成 | companion-response、message-coach、三种语气层，前端对话页完整体验 | 回复包含 followup_question 与 suggested_action；流式输出正常渲染 |
+| Phase 5：记忆系统 | ✅ 已完成 | 短期记忆、长期记忆、摘要、事件时间线，前端成长页 | 第二次对话能感知首次提到的关系对象；时间线可查看 |
 | Phase 6：恢复计划 | ⬜ 未开始 | 7天/14天计划、每日打卡、进度追踪，前端恢复计划页 | 可创建计划并完成打卡；任务卡正常渲染 |
 | Phase 7：安全生产化 | ⬜ 未开始 | 完整 safety-triage、输出守卫、埋点、Docker prod、Nginx、健康检查 | critical 场景被稳定拦截；`docker compose -f prod.yml up` 完整启动；`/api/health` 正常 |
 

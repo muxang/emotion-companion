@@ -9,15 +9,19 @@ export interface UserSettings {
 
 /** 拉取当前用户的偏好设置。 */
 export async function getSettings(): Promise<UserSettings> {
-  return fetchJson<UserSettings>('/api/settings', { method: 'GET' });
+  const data = await fetchJson<{ settings: UserSettings }>('/api/settings', {
+    method: 'GET',
+  });
+  return data.settings;
 }
 
 /** 更新当前用户的偏好设置（部分字段更新）。 */
 export async function updateSettings(
   patch: Partial<UserSettings>
 ): Promise<UserSettings> {
-  return fetchJson<UserSettings>('/api/settings', {
+  const data = await fetchJson<{ settings: UserSettings }>('/api/settings', {
     method: 'PUT',
     body: JSON.stringify(patch),
   });
+  return data.settings;
 }

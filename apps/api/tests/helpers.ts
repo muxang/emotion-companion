@@ -93,6 +93,20 @@ export function makeMockRepos(): {
       state.createdUsers++;
       return user;
     },
+    async updateSettings(id, input) {
+      const existing = state.usersById.get(id);
+      if (!existing) return null;
+      const updated: UserDTO = {
+        ...existing,
+        tone_preference: input.tone_preference ?? existing.tone_preference,
+        memory_enabled:
+          input.memory_enabled ?? existing.memory_enabled,
+        updated_at: new Date().toISOString(),
+      };
+      state.usersById.set(id, updated);
+      state.usersByAnonymousId.set(updated.anonymous_id, updated);
+      return updated;
+    },
   };
 
   const sessions: SessionRepository = {
