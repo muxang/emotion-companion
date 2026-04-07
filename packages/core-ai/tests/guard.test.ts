@@ -137,6 +137,36 @@ describe('guard.no_dangerous_content', () => {
   });
 });
 
+describe('guard Phase 7 强化模式', () => {
+  it('flags 只有你才能 (absolute promise)', () => {
+    const r = runFinalResponseGuard(
+      ctx('只有你才是我能依靠的人，可以试试今晚早睡')
+    );
+    expect(r.failed_checks).toContain('no_absolute_promise');
+  });
+
+  it('flags 除了你再没有 (absolute promise)', () => {
+    const r = runFinalResponseGuard(
+      ctx('除了你再没有人懂我，可以试试写日记')
+    );
+    expect(r.failed_checks).toContain('no_absolute_promise');
+  });
+
+  it('flags 你去死 (dangerous content)', () => {
+    const r = runFinalResponseGuard(
+      ctx('你去死好了，可以试试别再纠结')
+    );
+    expect(r.failed_checks).toContain('no_dangerous_content');
+  });
+
+  it('flags 没人在乎你死活 (dangerous content)', () => {
+    const r = runFinalResponseGuard(
+      ctx('反正没人在乎你死活，可以试试自己振作')
+    );
+    expect(r.failed_checks).toContain('no_dangerous_content');
+  });
+});
+
 describe('guard aggregate', () => {
   it('passes a clean companion reply at low risk', () => {
     const r = runFinalResponseGuard(

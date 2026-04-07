@@ -7,3 +7,4 @@ export * from './rules.js';
 export * from './guard.js';
 export * from './triage.js';
 export * from './constants.js';
+export * from './ai-classifier.js';

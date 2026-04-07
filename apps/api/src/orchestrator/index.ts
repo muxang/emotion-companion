@@ -33,7 +33,7 @@ import {
   runRecoveryPlan,
 } from '@emotion/skill-recovery-plan';
 import { collectStream } from '@emotion/core-ai';
-import { classifyByKeywords } from '@emotion/safety';
+import { classifyByKeywords, runFullTriage } from '@emotion/safety';
 import type {
   AnalysisResult,
   ConversationMode,
@@ -41,6 +41,7 @@ import type {
   MessageCoachResult,
   RecoveryTask,
   RiskLevel,
+  SafetyResponse,
 } from '@emotion/shared';
 import { decideMode } from './router.js';
 import { placeholderStream } from './placeholder.js';
@@ -100,32 +101,68 @@ export async function* orchestrate(
     log.warn({ err, requestId }, 'recent history fetch failed');
   }
 
-  // ---------- Step 1: emotion-intake ----------
-  const intakeInput: EmotionIntakeInput = {
-    user_text: input.user_text,
-    recent_history: history,
-  };
-  let intake: IntakeResult;
+  // ---------- Step 0: Early Safety Triage（Phase 7） ----------
+  // 在 emotion-intake 之前先跑一次 full triage（关键词 + AI 二次分类）。
+  // 若结果 >= high → 直接走 safety，跳过 emotion-intake，节省一次 AI 调用。
+  // AI 失败/超时会在 runFullTriage 内部沉默回退到关键词结果，不抛错。
+  let earlyTriage: SafetyResponse | null = null;
   try {
-    intake = await runEmotionIntake(intakeInput, {
-      ai: deps.ai,
+    earlyTriage = await runFullTriage(input.user_text, deps.ai, {
       signal: deps.signal,
-      timeoutMs: deps.intakeTimeoutMs,
+      // 内部硬超时 3s，这里复用 intakeTimeoutMs 作为上限保护
+      ...(deps.intakeTimeoutMs !== undefined
+        ? { timeoutMs: Math.min(3000, deps.intakeTimeoutMs) }
+        : {}),
     });
   } catch (err) {
-    log.error({ err, requestId }, 'emotion-intake threw unexpectedly');
+    log.warn({ err, requestId }, 'early triage threw unexpectedly');
+    earlyTriage = null;
+  }
+  const earlyHigh =
+    earlyTriage !== null &&
+    (earlyTriage.risk_level === 'high' ||
+      earlyTriage.risk_level === 'critical');
+
+  // ---------- Step 1: emotion-intake（earlyHigh 时跳过） ----------
+  let intake: IntakeResult;
+  if (earlyHigh && earlyTriage) {
+    // 高风险直通：构造一个最小 intake，跳过 AI 调用
     intake = {
-      emotion_state: 'mixed',
+      emotion_state: 'desperate',
       issue_type: 'general',
-      risk_level: 'low',
-      next_mode: 'companion',
-      confidence: 0,
-      reasoning: 'orchestrator_intake_exception',
+      risk_level: earlyTriage.risk_level,
+      next_mode: 'safety',
+      confidence: 1,
+      reasoning: 'early_triage_blocked',
     };
+  } else {
+    const intakeInput: EmotionIntakeInput = {
+      user_text: input.user_text,
+      recent_history: history,
+    };
+    try {
+      intake = await runEmotionIntake(intakeInput, {
+        ai: deps.ai,
+        signal: deps.signal,
+        timeoutMs: deps.intakeTimeoutMs,
+      });
+    } catch (err) {
+      log.error({ err, requestId }, 'emotion-intake threw unexpectedly');
+      intake = {
+        emotion_state: 'mixed',
+        issue_type: 'general',
+        risk_level: 'low',
+        next_mode: 'companion',
+        confidence: 0,
+        reasoning: 'orchestrator_intake_exception',
+      };
+    }
   }
 
   // 关键词兜底：与 intake 风险取较高
-  const keywordRisk = classifyByKeywords(input.user_text);
+  // earlyTriage 已经包含 AI + 关键词结果，优先用其 risk_level
+  const keywordRisk: RiskLevel =
+    earlyTriage?.risk_level ?? classifyByKeywords(input.user_text);
 
   // ---------- Step 2/3/4: 路由决策 ----------
   let lastAssistantRisk: RiskLevel | null = null;
@@ -438,8 +475,15 @@ export async function* orchestrate(
   try {
     if (decision.mode === 'safety') {
       // safety 走规则，不进 guard / retry
-      const triage = runSafetyTriage({ user_text: input.user_text });
-      firstText = await collectStream(triage.stream, deps.signal);
+      // 优先复用 earlyTriage 的 meta（已包含 AI 二次分类结果），避免重复调用
+      let triageMeta: SafetyResponse;
+      if (earlyTriage && earlyTriage.safe_mode) {
+        triageMeta = earlyTriage;
+      } else {
+        const triage = await runSafetyTriage({ user_text: input.user_text });
+        triageMeta = triage.meta;
+      }
+      firstText = triageMeta.support_message ?? '';
     } else if (decision.mode === 'analysis') {
       // 已在预运行阶段拿到 firstText；若预运行失败（非 Blocked）则现在补跑一次
       firstText =

@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
-import { runKeywordTriage } from '../src/triage.js';
+import { describe, it, expect, vi } from 'vitest';
+import { runKeywordTriage, runFullTriage } from '../src/triage.js';
 import { REAL_HELP_GUIDANCE } from '../src/constants.js';
+import type { AIClassifierClient } from '../src/ai-classifier.js';
 
 describe('runKeywordTriage - critical 触发', () => {
   const criticalSamples = [
@@ -102,5 +103,74 @@ describe('runKeywordTriage - 边界与一致性', () => {
       block_analysis: expect.any(Boolean),
       next_step: expect.any(String),
     });
+  });
+});
+
+function makeAi(impl: AIClassifierClient['complete']): AIClassifierClient {
+  return { complete: impl };
+}
+
+describe('runFullTriage - 关键词 + AI 二次分类', () => {
+  it('无 aiClient 时退化为关键词结果', async () => {
+    const r = await runFullTriage('我不想活了');
+    expect(r.risk_level).toBe('critical');
+  });
+
+  it('关键词命中 critical 时直接返回，不调用 AI', async () => {
+    const fn = vi.fn().mockResolvedValue('{"risk_level":"low","confidence":0.9,"reasoning":""}');
+    const r = await runFullTriage('我想死', makeAi(fn));
+    expect(r.risk_level).toBe('critical');
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it('关键词命中 high 时直接返回，不调用 AI', async () => {
+    const fn = vi.fn().mockResolvedValue('{"risk_level":"low","confidence":0.9,"reasoning":""}');
+    const r = await runFullTriage('我快崩溃了', makeAi(fn));
+    expect(r.risk_level).toBe('high');
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it('关键词 low + AI 升级为 high → 取较高值 high', async () => {
+    const fn = vi.fn().mockResolvedValue(
+      '{"risk_level":"high","confidence":0.9,"reasoning":"语义层判断"}'
+    );
+    const r = await runFullTriage('感觉一切都没意义了，撑不太住', makeAi(fn));
+    expect(r.risk_level).toBe('high');
+    expect(r.safe_mode).toBe(true);
+    expect(r.block_analysis).toBe(true);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('关键词 low + AI 仍判 low → 保持 low', async () => {
+    const fn = vi.fn().mockResolvedValue(
+      '{"risk_level":"low","confidence":0.8,"reasoning":""}'
+    );
+    const r = await runFullTriage('今天天气还行', makeAi(fn));
+    expect(r.risk_level).toBe('low');
+    expect(r.safe_mode).toBe(false);
+  });
+
+  it('AI 超时 → 沉默回退到关键词结果', async () => {
+    const fn = vi.fn().mockImplementation(
+      () => new Promise<string>(() => undefined)
+    );
+    const r = await runFullTriage('我有点烦', makeAi(fn), { timeoutMs: 50 });
+    expect(r.risk_level).toBe('low');
+  });
+
+  it('AI 解析失败 → 沉默回退到关键词结果', async () => {
+    const fn = vi.fn().mockResolvedValue('not json at all');
+    const r = await runFullTriage('我有点烦', makeAi(fn));
+    expect(r.risk_level).toBe('low');
+  });
+
+  it('AI 升级到 critical → 取 critical 并填充 critical 文案', async () => {
+    const fn = vi.fn().mockResolvedValue(
+      '{"risk_level":"critical","confidence":0.99,"reasoning":"具体计划"}'
+    );
+    const r = await runFullTriage('我已经准备好了所有的东西', makeAi(fn));
+    expect(r.risk_level).toBe('critical');
+    expect(r.suggest_real_help).toBe(true);
+    expect(r.support_message).toContain(REAL_HELP_GUIDANCE);
   });
 });

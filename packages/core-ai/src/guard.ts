@@ -35,6 +35,9 @@ const ABSOLUTE_PROMISE_PATTERNS: RegExp[] = [
   /一定(不会|永远)/,
   /(永不|绝不)(离开|放弃|改变)/,
   /不可能(忘记|放弃|失去)你/,
+  /只有你(才|是|能)/,
+  /除了你(再)?(没有|没)/,
+  /没有(人|谁)(能|可以)(代替|取代)你/,
 ];
 
 function noAbsolutePromise(text: string): boolean {
@@ -121,6 +124,9 @@ const DANGEROUS_CONTENT_PATTERNS: RegExp[] = [
   /上吊/,
   /烧炭/,
   /(具体|详细)(方法|教程|步骤).{0,8}(自残|自伤|结束)/,
+  /你去死/,
+  /(没人|谁也不)在乎你(死活|的死活)/,
+  /(去死吧|该死的是你)/,
 ];
 
 function noDangerousContent(text: string): boolean {
