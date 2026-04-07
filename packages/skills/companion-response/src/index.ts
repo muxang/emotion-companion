@@ -8,9 +8,9 @@ import type { AIClient } from '@emotion/core-ai';
 import { buildCompanionPrompt } from './prompt.js';
 import type { CompanionInput } from './types.js';
 
-export { buildCompanionPrompt } from './prompt.js';
+export { buildCompanionPrompt, inferTone } from './prompt.js';
 export { finalizeCompanionText, COMPANION_EMPTY_FALLBACK } from './parser.js';
-export type { CompanionInput } from './types.js';
+export type { CompanionInput, CompanionTone } from './types.js';
 
 export interface CompanionDeps {
   ai: AIClient;
