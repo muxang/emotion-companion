@@ -23,12 +23,17 @@ import {
   BlockedByRiskError,
   runTongAnalysis,
 } from '@emotion/skill-tong-analysis';
+import {
+  BlockedByRiskError as CoachBlockedByRiskError,
+  runMessageCoach,
+} from '@emotion/skill-message-coach';
 import { collectStream } from '@emotion/core-ai';
 import { classifyByKeywords } from '@emotion/safety';
 import type {
   AnalysisResult,
   ConversationMode,
   IntakeResult,
+  MessageCoachResult,
   RiskLevel,
 } from '@emotion/shared';
 import { decideMode } from './router.js';
@@ -39,6 +44,10 @@ import {
   buildAnalysisInputFromIntake,
   formatAnalysisText,
 } from './analysis-input.js';
+import {
+  buildCoachInputFromIntake,
+  formatCoachText,
+} from './coach-input.js';
 import type {
   IntakeResultPublic,
   OrchestratorDeps,
@@ -122,6 +131,8 @@ export async function* orchestrate(
   //   2. 把结构化 JSON 写入 messages.structured_json
   let analysisStructured: AnalysisResult | null = null;
   let analysisInitialText: string | null = null;
+  let coachStructured: MessageCoachResult | null = null;
+  let coachInitialText: string | null = null;
   if (decision.mode === 'analysis') {
     try {
       const tongInput = buildAnalysisInputFromIntake(intake, input.user_text);
@@ -152,6 +163,42 @@ export async function* orchestrate(
       } else {
         // 其他异常：记录后让下游 collectStream 阶段拿到 null → 走兜底文案
         log.error({ err, requestId }, 'tong-analysis unexpected error');
+      }
+    }
+  }
+
+  // ---------- Coach 预运行 ----------
+  // 与 analysis 同构：非流式跑一次 message-coach 拿 3 条话术，
+  // 拼接为流式文本回放，并把 structured JSON 写入 messages.structured_json。
+  if (decision.mode === 'coach') {
+    try {
+      const coachInput = buildCoachInputFromIntake(intake, input.user_text);
+      const result = await runMessageCoach(coachInput, {
+        ai: deps.ai,
+        risk_level: decision.effective_risk,
+        signal: deps.signal,
+        timeoutMs: deps.intakeTimeoutMs,
+      });
+      coachStructured = result;
+      coachInitialText = formatCoachText(result);
+    } catch (err) {
+      if (err instanceof CoachBlockedByRiskError) {
+        // 第二道防线触发：路由层应已拦截 high/critical，但仍降级到 safety
+        log.warn(
+          { requestId, risk_level: err.risk_level },
+          'message-coach blocked by second-line guard, falling back to safety'
+        );
+        decision = {
+          mode: 'safety',
+          effective_risk: decision.effective_risk,
+          reason: 'message_coach_blocked_fallback',
+        };
+      } else if (deps.signal.aborted) {
+        log.info({ requestId }, 'coach aborted before meta');
+        yield { type: 'error', code: 'ABORTED', message: '请求已中止' };
+        return;
+      } else {
+        log.error({ err, requestId }, 'message-coach unexpected error');
       }
     }
   }
@@ -212,9 +259,30 @@ export async function* orchestrate(
     }
   };
 
+  // coach 模式的 regenerate：重新跑 runMessageCoach 并刷新 structured 结果
+  const regenerateCoach = async (): Promise<string> => {
+    const coachInput = buildCoachInputFromIntake(intake, input.user_text);
+    try {
+      const result = await runMessageCoach(coachInput, {
+        ai: deps.ai,
+        risk_level: decision.effective_risk,
+        signal: deps.signal,
+        timeoutMs: deps.intakeTimeoutMs,
+      });
+      coachStructured = result;
+      return formatCoachText(result);
+    } catch (err) {
+      log.warn({ err, requestId }, 'message-coach regenerate failed');
+      return '我没办法基于现有信息给出三条稳的话术。可以再补充一下你想表达的核心意思，我们一起把它捋出来。';
+    }
+  };
+
   const runOnce = async (): Promise<string> => {
     if (decision.mode === 'analysis') {
       return regenerateAnalysis();
+    }
+    if (decision.mode === 'coach') {
+      return regenerateCoach();
     }
     const stream = pickSkillStream(decision.mode, intake, input, history, deps);
     return collectStream(stream, deps.signal);
@@ -229,6 +297,9 @@ export async function* orchestrate(
       // 已在预运行阶段拿到 firstText；若预运行失败（非 Blocked）则现在补跑一次
       firstText =
         analysisInitialText ?? (await regenerateAnalysis());
+    } else if (decision.mode === 'coach') {
+      // 同 analysis：复用预运行结果，失败则当场补跑一次
+      firstText = coachInitialText ?? (await regenerateCoach());
     } else {
       firstText = await runOnce();
     }
@@ -303,9 +374,12 @@ export async function* orchestrate(
         content: finalText,
         risk_level: decision.effective_risk,
         intake_result: intakeForDb,
-        structured_json: analysisStructured
-          ? (analysisStructured as unknown as Record<string, unknown>)
-          : null,
+        structured_json:
+          analysisStructured
+            ? (analysisStructured as unknown as Record<string, unknown>)
+            : coachStructured
+              ? (coachStructured as unknown as Record<string, unknown>)
+              : null,
       });
       // 计数 +2（user + assistant）；user 未写时只 +1
       const delta = userWritten ? 2 : 1;
