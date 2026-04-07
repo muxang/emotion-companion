@@ -435,6 +435,19 @@ export async function* orchestrate(
     return collectStream(stream, deps.signal);
   };
 
+  // Phase 7：safety 模式埋点（fire-and-forget）
+  if (decision.mode === 'safety') {
+    deps.tracker?.track(
+      'safety_triggered',
+      {
+        risk_level: decision.effective_risk,
+        request_id: requestId,
+        session_id: input.session_id,
+      },
+      input.user_id
+    );
+  }
+
   try {
     if (decision.mode === 'safety') {
       // safety 走规则，不进 guard / retry

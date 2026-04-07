@@ -24,7 +24,11 @@
       "Bash(pnpm --filter @emotion/web run test)",
       "Bash(pnpm typecheck:*)",
       "Bash(pnpm --filter @emotion/web test)",
-      "Bash(pnpm exec:*)"
+      "Bash(pnpm exec:*)",
+      "Bash(mkdir:*)",
+      "Bash(ls:*)",
+      "Bash(git stash:*)",
+      "Bash(pnpm --filter web test)"
     ]
   }
 }

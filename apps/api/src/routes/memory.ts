@@ -31,6 +31,7 @@ export async function memoryRoutes(app: FastifyInstance): Promise<void> {
       { userId, ...result },
       'memory.delete: anonymized/deleted user long-term memory'
     );
+    app.tracker.track('memory_deleted', { ...result }, userId);
     return reply.send(ok({ deleted: result }));
   });
 }

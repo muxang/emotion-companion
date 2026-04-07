@@ -53,6 +53,11 @@ export async function recoveryRoutes(app: FastifyInstance): Promise<void> {
       userId,
       parsed.data.plan_type
     );
+    app.tracker.track(
+      'recovery_plan_created',
+      { plan_id: plan.id, plan_type: plan.plan_type, total_days: plan.total_days },
+      userId
+    );
     return reply.code(201).send(ok({ plan }));
   });
 
@@ -175,6 +180,16 @@ export async function recoveryRoutes(app: FastifyInstance): Promise<void> {
         })
       );
     }
+
+    app.tracker.track(
+      'recovery_checkin_completed',
+      {
+        plan_id: plan.id,
+        day_index: dayIndex,
+        total_days: plan.total_days,
+      },
+      userId
+    );
 
     return reply.send(
       ok({

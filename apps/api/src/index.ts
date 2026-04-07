@@ -1,4 +1,5 @@
 import { AIClient } from '@emotion/core-ai';
+import { createTracker } from '@emotion/analytics';
 import {
   extractAndSaveEntities,
   formatMemoryContext,
@@ -8,6 +9,8 @@ import {
 import { buildApp } from './app.js';
 import { loadEnv } from './config/env.js';
 import { getPool, closePool } from './db/pool.js';
+import { closeRedis } from './redis/client.js';
+import { registerGracefulShutdown } from './utils/graceful-shutdown.js';
 import { createUserRepository } from './db/repositories/users.js';
 import { createSessionRepository } from './db/repositories/sessions.js';
 import { createMessageRepository } from './db/repositories/messages.js';
@@ -37,6 +40,8 @@ async function bootstrap(): Promise<void> {
     formatMemoryContext,
   };
 
+  const tracker = createTracker(pool);
+
   const app = await buildApp({
     repos: {
       users: createUserRepository(pool),
@@ -47,19 +52,13 @@ async function bootstrap(): Promise<void> {
     },
     aiClient,
     memoryDeps,
+    tracker,
   });
 
-  const shutdown = async (signal: string): Promise<void> => {
-    app.log.info({ signal }, 'shutting down');
-    try {
-      await app.close();
-      await closePool();
-    } finally {
-      process.exit(0);
-    }
-  };
-  process.on('SIGINT', () => void shutdown('SIGINT'));
-  process.on('SIGTERM', () => void shutdown('SIGTERM'));
+  registerGracefulShutdown(app, {
+    closePool,
+    closeRedis,
+  });
 
   try {
     await app.listen({ port: env.PORT, host: env.HOST });

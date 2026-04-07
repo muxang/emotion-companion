@@ -67,6 +67,17 @@ export interface OrchestratorDeps {
    * 缺省时 Step 5 跳过、Step 8 后异步任务跳过。
    */
   memory?: OrchestratorMemoryDeps;
+  /**
+   * Phase 7：可选埋点 tracker，fire-and-forget。
+   * 缺省时不埋点（测试环境无需 mock）。
+   */
+  tracker?: {
+    track: (
+      eventName: string,
+      properties?: Record<string, unknown>,
+      userId?: string | null
+    ) => void;
+  };
 }
 
 export interface OrchestratorMeta {
