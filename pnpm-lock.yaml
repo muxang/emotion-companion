@@ -41,6 +41,9 @@ importers:
       '@emotion/skill-emotion-intake':
         specifier: workspace:*
         version: link:../../packages/skills/emotion-intake
+      '@emotion/skill-message-coach':
+        specifier: workspace:*
+        version: link:../../packages/skills/message-coach
       '@emotion/skill-safety-triage':
         specifier: workspace:*
         version: link:../../packages/skills/safety-triage
@@ -253,6 +256,9 @@ importers:
 
   packages/skills/message-coach:
     dependencies:
+      '@emotion/core-ai':
+        specifier: workspace:*
+        version: link:../../core-ai
       '@emotion/shared':
         specifier: workspace:*
         version: link:../../shared
