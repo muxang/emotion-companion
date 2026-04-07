@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import {
   CreateSessionSchema,
   SessionIdParamSchema,
+  UpdateSessionSchema,
 } from '@emotion/shared';
 import { ok, fail } from '../utils/response.js';
 
@@ -77,5 +78,36 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send(fail('NOT_FOUND', '会话不存在或无权删除'));
     }
     return reply.send(ok({ deleted: true }));
+  });
+
+  // PATCH /sessions/:id  仅允许改 title
+  app.patch('/sessions/:id', async (request, reply) => {
+    const userId = request.userId;
+    if (!userId) {
+      return reply.code(401).send(fail('UNAUTHORIZED', '未登录'));
+    }
+    const params = SessionIdParamSchema.safeParse(request.params);
+    if (!params.success) {
+      return reply
+        .code(422)
+        .send(fail('VALIDATION_ERROR', 'session id 不合法'));
+    }
+    const body = UpdateSessionSchema.safeParse(request.body ?? {});
+    if (!body.success) {
+      return reply.code(422).send(
+        fail('VALIDATION_ERROR', '会话标题不合法（1~60 字）', {
+          issues: body.error.issues,
+        })
+      );
+    }
+    const updated = await app.repos.sessions.updateTitle(
+      params.data.id,
+      userId,
+      body.data.title
+    );
+    if (!updated) {
+      return reply.code(404).send(fail('NOT_FOUND', '会话不存在或无权修改'));
+    }
+    return reply.send(ok({ session: updated }));
   });
 }

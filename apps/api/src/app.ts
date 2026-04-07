@@ -4,7 +4,7 @@ import rateLimit from '@fastify/rate-limit';
 import type { AIClient } from '@emotion/core-ai';
 import { createNoopTracker, type Tracker } from '@emotion/analytics';
 import { loadEnv } from './config/env.js';
-import { getRedis } from './redis/client.js';
+import { getRedis, awaitRedisReady } from './redis/client.js';
 import jwtPlugin from './middleware/jwt.js';
 import { registerErrorHandler } from './middleware/error.js';
 import { healthRoutes } from './routes/health.js';
@@ -86,7 +86,11 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // 全局默认配额由 MAX_REQUESTS_PER_MINUTE 控制；
   // /api/chat/stream 与 /api/analysis/relationship 在各自路由上再声明更严格的独立配额。
   // Redis 可用时走 Redis store（多实例共享），否则降级为内存 store 不阻塞启动。
-  const redisForLimit = getRedis();
+  //
+  // 必须先 awaitRedisReady：避免连接握手未完成时 rate-limit 第一个请求就抛
+  // "Stream isn't writeable"。Ready 失败/超时则降级为内存 store。
+  const redisStatus = await awaitRedisReady(2_000);
+  const redisForLimit = redisStatus === 'ok' ? getRedis() : null;
   await app.register(rateLimit, {
     global: true,
     max: env.MAX_REQUESTS_PER_MINUTE,

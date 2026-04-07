@@ -39,7 +39,10 @@ export function getRedis(): Redis | null {
       // 启动阶段不阻塞：失败走错误事件，主流程继续
       lazyConnect: false,
       maxRetriesPerRequest: 2,
-      enableOfflineQueue: false,
+      // 必须为 true：连接握手期间命令排队等待 ready，
+      // 否则会抛 "Stream isn't writeable and enableOfflineQueue options is false"，
+      // 这会让 @fastify/rate-limit 的第一个请求直接 500。
+      enableOfflineQueue: true,
       connectTimeout: 5_000,
       // 默认 retryStrategy：指数退避，最多重试 5 次后停手
       retryStrategy: (times) => (times > 5 ? null : Math.min(times * 200, 2_000)),
@@ -76,6 +79,62 @@ export function getRedis(): Redis | null {
 export function getRedisStatus(): RedisStatus {
   if (!initialized) return 'disabled';
   return status;
+}
+
+/**
+ * 启动时调用：在 timeoutMs 内确认 redis 是否真的可用。
+ *
+ * 返回 'ok'      → 已连接，rate-limit 可以安全使用
+ * 返回 'error'   → 已配置但连不上，调用方应降级到内存 store
+ * 返回 'disabled'→ 未配置 REDIS_URL
+ *
+ * 即便后续 redis 中途断线，rate-limit 也会因 ioredis 自带的重连和
+ * enableOfflineQueue 排队继续工作，不会让请求 500。
+ */
+export async function awaitRedisReady(timeoutMs = 2_000): Promise<RedisStatus> {
+  const r = getRedis();
+  if (!r) return 'disabled';
+
+  // 如果 ready 事件已经触发，状态会变成 'ok'，可以直接 ping 校验
+  // 否则等到 ready 或 error，最多 timeoutMs
+  if (status !== 'ok') {
+    const reachable = await new Promise<boolean>((resolve) => {
+      let settled = false;
+      const finish = (v: boolean): void => {
+        if (settled) return;
+        settled = true;
+        r.off('ready', onReady);
+        r.off('error', onError);
+        clearTimeout(timer);
+        resolve(v);
+      };
+      const onReady = (): void => finish(true);
+      const onError = (): void => finish(false);
+      r.once('ready', onReady);
+      r.once('error', onError);
+      const timer = setTimeout(() => finish(false), timeoutMs);
+    });
+    if (!reachable) {
+      status = 'error';
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[redis] not ready within ${timeoutMs}ms, falling back to in-memory store`
+      );
+      return 'error';
+    }
+  }
+
+  // 再 ping 一下确认 RTT 健康
+  try {
+    const pong = await r.ping();
+    status = pong === 'PONG' ? 'ok' : 'error';
+    return status;
+  } catch (err) {
+    status = 'error';
+    // eslint-disable-next-line no-console
+    console.warn('[redis] ping failed at startup:', (err as Error).message);
+    return 'error';
+  }
 }
 
 /**

@@ -865,7 +865,7 @@ docker compose -f infra/docker-compose.prod.yml up -d
 | Phase 4：陪伴回复系统 | ✅ 已完成 | companion-response、message-coach、三种语气层，前端对话页完整体验 | 回复包含 followup_question 与 suggested_action；流式输出正常渲染 |
 | Phase 5：记忆系统 | ✅ 已完成 | 短期记忆、长期记忆、摘要、事件时间线，前端成长页 | 第二次对话能感知首次提到的关系对象；时间线可查看 |
 | Phase 6：恢复计划 | ✅ 已完成 | 7天/14天计划、每日打卡、进度追踪，前端恢复计划页 | 可创建计划并完成打卡；任务卡正常渲染 |
-| Phase 7：安全生产化 | ⬜ 未开始 | 完整 safety-triage、输出守卫、埋点、Docker prod、Nginx、健康检查 | critical 场景被稳定拦截；`docker compose -f prod.yml up` 完整启动；`/api/health` 正常 |
+| Phase 7：安全生产化 | ✅ 已完成 | 完整 safety-triage、输出守卫、埋点、Docker prod、Nginx、健康检查 | critical 场景被稳定拦截；`docker compose -f prod.yml up` 完整启动；`/api/health` 正常 |
 
 ---
 

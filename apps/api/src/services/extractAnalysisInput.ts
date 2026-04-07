@@ -34,6 +34,21 @@ interface ExtractDeps {
   ai: AIClient;
   signal?: AbortSignal;
   timeoutMs?: number;
+  /** 可选 logger，用于把 AI 失败 / 解析失败 / 降级原因写到 server log */
+  logger?: {
+    warn: (obj: Record<string, unknown>, msg?: string) => void;
+  };
+}
+
+export type ExtractDegradeReason =
+  | 'ai_request_failed'
+  | 'parse_failed'
+  | null;
+
+export interface ExtractAnalysisResult {
+  input: TongAnalysisInput;
+  /** null 表示成功；非 null 表示走了降级路径 */
+  degraded: ExtractDegradeReason;
 }
 
 interface ExtractedRaw {
@@ -131,7 +146,7 @@ function parseExtracted(raw: string, userText: string): TongAnalysisInput {
 export async function extractAnalysisInput(
   userText: string,
   deps: ExtractDeps
-): Promise<TongAnalysisInput> {
+): Promise<ExtractAnalysisResult> {
   let raw: string;
   try {
     raw = await deps.ai.complete({
@@ -141,10 +156,33 @@ export async function extractAnalysisInput(
       signal: deps.signal,
       timeoutMs: deps.timeoutMs ?? 10_000,
     });
-  } catch {
-    return SAFE_DEFAULT(userText);
+  } catch (err) {
+    deps.logger?.warn(
+      {
+        err: err instanceof Error ? err.message : String(err),
+        userTextLen: userText.length,
+      },
+      '[analysis] extractAnalysisInput: AI request failed, using safe default'
+    );
+    return { input: SAFE_DEFAULT(userText), degraded: 'ai_request_failed' };
   }
-  return parseExtracted(raw, userText);
+
+  // 解析阶段：检测是否落到了 SAFE_DEFAULT
+  const safe = SAFE_DEFAULT(userText);
+  const parsed = parseExtracted(raw, userText);
+  // 用最简单的字段对比识别"和兜底完全一致"——通常意味着模型返回了无法解析的文本
+  const looksLikeFallback =
+    parsed.user_goal === safe.user_goal &&
+    parsed.relationship_stage === safe.relationship_stage &&
+    parsed.user_state === safe.user_state;
+  if (looksLikeFallback) {
+    deps.logger?.warn(
+      { rawHead: raw.slice(0, 200) },
+      '[analysis] extractAnalysisInput: parse failed, using safe default'
+    );
+    return { input: parsed, degraded: 'parse_failed' };
+  }
+  return { input: parsed, degraded: null };
 }
 
 export const __test__ = { parseExtracted, SAFE_DEFAULT };

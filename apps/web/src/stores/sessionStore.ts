@@ -5,6 +5,7 @@ import {
   deleteSession,
   getSession,
   listSessions,
+  renameSession as apiRenameSession,
 } from '../api/sessions.js';
 
 interface SessionState {
@@ -18,6 +19,7 @@ interface SessionState {
   ensureSession: () => Promise<string>;
   newSession: () => Promise<string>;
   removeSession: (id: string) => Promise<void>;
+  renameSession: (id: string, title: string) => Promise<void>;
 }
 
 export const useSessionStore = create<SessionState>((set, get) => ({
@@ -83,5 +85,30 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       currentSessionId,
       currentMessages: currentSessionId ? get().currentMessages : [],
     });
+  },
+
+  async renameSession(id, title) {
+    const trimmed = title.trim();
+    if (trimmed.length === 0) return;
+    // 乐观更新：立刻刷新本地列表，失败时回滚
+    const previous = get().sessions;
+    set({
+      sessions: previous.map((s) =>
+        s.id === id ? { ...s, title: trimmed } : s
+      ),
+    });
+    try {
+      const updated = await apiRenameSession(id, trimmed);
+      set({
+        sessions: get().sessions.map((s) => (s.id === id ? updated : s)),
+      });
+    } catch (err) {
+      // 失败回滚
+      set({
+        sessions: previous,
+        error: err instanceof Error ? err.message : '重命名失败',
+      });
+      throw err;
+    }
   },
 }));

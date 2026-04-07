@@ -168,6 +168,17 @@ export function makeMockRepos(): {
       state.sessions.set(id, updated);
       return updated;
     },
+    async updateTitle(id, userId, title) {
+      const s = state.sessions.get(id);
+      if (!s || s.user_id !== userId) return null;
+      const updated: SessionDTO = {
+        ...s,
+        title,
+        updated_at: new Date().toISOString(),
+      };
+      state.sessions.set(id, updated);
+      return updated;
+    },
   };
 
   const messages: MessageRepository = {

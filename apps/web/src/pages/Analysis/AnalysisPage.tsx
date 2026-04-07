@@ -56,6 +56,15 @@ export function AnalysisPage(): JSX.Element {
           <Link to="/analysis" className="text-warm-700">
             分析
           </Link>
+          <Link to="/recovery" className="hover:text-warm-700">
+            恢复
+          </Link>
+          <Link to="/growth" className="hover:text-warm-700">
+            成长
+          </Link>
+          <Link to="/settings" className="hover:text-warm-700">
+            设置
+          </Link>
         </nav>
       </header>
 

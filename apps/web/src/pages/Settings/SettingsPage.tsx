@@ -70,6 +70,9 @@ export function SettingsPage(): JSX.Element {
           <Link to="/analysis" className="hover:text-warm-700">
             分析
           </Link>
+          <Link to="/recovery" className="hover:text-warm-700">
+            恢复
+          </Link>
           <Link to="/growth" className="hover:text-warm-700">
             成长
           </Link>

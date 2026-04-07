@@ -11,3 +11,9 @@ export const SessionIdParamSchema = z.object({
   id: z.string().uuid(),
 });
 export type SessionIdParam = z.infer<typeof SessionIdParamSchema>;
+
+/** PATCH /api/sessions/:id 请求体；目前只允许改 title */
+export const UpdateSessionSchema = z.object({
+  title: z.string().trim().min(1).max(60),
+});
+export type UpdateSessionInput = z.infer<typeof UpdateSessionSchema>;

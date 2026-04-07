@@ -1,28 +1,51 @@
 import { fetchJson } from './client.js';
 
 /**
- * 时间线事件 DTO（Phase 5）。
- * 后端契约见 CLAUDE.md §12.1，对应 GET /api/memory/timeline。
+ * 成长记录三类信号（Phase 5 / Phase 7）。
+ * 对应 GET /api/memory/timeline。
  */
 export interface TimelineEvent {
   id: string;
   event_type: string;
   event_time: string | null;
   summary: string;
-  entity_label: string | null;
+  entity_label?: string | null;
   created_at: string;
 }
 
-interface TimelineResponse {
-  events: TimelineEvent[];
+export interface TimelineEntity {
+  id: string;
+  label: string;
+  relation_type: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
-/** 拉取用户的成长记录时间线。 */
-export async function getTimeline(): Promise<TimelineEvent[]> {
-  const data = await fetchJson<TimelineResponse>('/api/memory/timeline', {
+export interface TimelineSummary {
+  id: string;
+  session_id: string | null;
+  summary_type: 'session' | 'weekly' | 'entity';
+  summary_text: string;
+  created_at: string;
+}
+
+export interface GrowthFeed {
+  events: TimelineEvent[];
+  entities: TimelineEntity[];
+  summaries: TimelineSummary[];
+}
+
+/** 拉取用户的成长记录（events / entities / summaries 三类）。 */
+export async function getTimeline(): Promise<GrowthFeed> {
+  const data = await fetchJson<GrowthFeed>('/api/memory/timeline', {
     method: 'GET',
   });
-  return data.events ?? [];
+  return {
+    events: data.events ?? [],
+    entities: data.entities ?? [],
+    summaries: data.summaries ?? [],
+  };
 }
 
 interface DeleteMemoryResponse {

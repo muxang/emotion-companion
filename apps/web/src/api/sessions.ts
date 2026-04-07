@@ -34,3 +34,18 @@ export async function deleteSession(id: string): Promise<void> {
     method: 'DELETE',
   });
 }
+
+/** 修改会话标题（PATCH /api/sessions/:id） */
+export async function renameSession(
+  id: string,
+  title: string
+): Promise<SessionDTO> {
+  const data = await fetchJson<{ session: SessionDTO }>(
+    `/api/sessions/${id}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ title }),
+    }
+  );
+  return data.session;
+}

@@ -1,7 +1,7 @@
 /**
- * Memory routes - Phase 5
+ * Memory routes - Phase 5 / Phase 7
  *
- * - GET  /memory/timeline   返回最近 10 条关键事件
+ * - GET  /memory/timeline   返回成长 feed：events / entities / summaries 三类
  * - POST /memory/delete     删除 / 匿名化用户全部长期记忆（CLAUDE.md §14.3）
  *
  * 全部接口受 requireAuth 保护。
@@ -17,8 +17,16 @@ export async function memoryRoutes(app: FastifyInstance): Promise<void> {
     if (!userId) {
       return reply.code(401).send(fail('UNAUTHORIZED', '未登录'));
     }
-    const events = await app.repos.memory.getRelationshipEvents(userId, 10);
-    return reply.send(ok({ events }));
+    // 同时取三类成长信号，前端按需渲染：
+    //  - events    : AI 抽出的"具体事件"（最稀疏，需要明确事件描述）
+    //  - entities  : AI 抽出的"关系对象"（次稀疏）
+    //  - summaries : 每会话生成的对话摘要（最稠密，普通聊天即可产生）
+    const [events, entities, summaries] = await Promise.all([
+      app.repos.memory.getRelationshipEvents(userId, 10),
+      app.repos.memory.getRelationshipEntities(userId),
+      app.repos.memory.getMemorySummaries(userId, undefined, 10),
+    ]);
+    return reply.send(ok({ events, entities, summaries }));
   });
 
   app.post('/memory/delete', async (request, reply) => {

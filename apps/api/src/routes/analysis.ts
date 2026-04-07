@@ -8,6 +8,7 @@ import {
 import {
   runTongAnalysis,
   BlockedByRiskError,
+  SAFE_DEFAULT_ANALYSIS,
 } from '@emotion/skill-tong-analysis';
 import { ok, fail } from '../utils/response.js';
 import { extractAnalysisInput } from '../services/extractAnalysisInput.js';
@@ -78,15 +79,36 @@ export async function analysisRoutes(app: FastifyInstance): Promise<void> {
       userId
     );
 
-    // 3. 抽取结构化字段（失败走安全降级，永不抛错）
-    const extracted = await extractAnalysisInput(inputParsed.data.user_text, {
-      ai: app.aiClient,
-    });
+    // 3. 抽取结构化字段（失败走安全降级，永不抛错；degraded 标记会上传到 route）
+    const extractResult = await extractAnalysisInput(
+      inputParsed.data.user_text,
+      {
+        ai: app.aiClient,
+        logger: request.log,
+      }
+    );
+
+    // 抽取阶段就 AI 失败了 → 多半是上游 AI 服务挂了，没必要再跑 wrapper
+    if (extractResult.degraded === 'ai_request_failed') {
+      request.log.error(
+        { userId, stage: 'extract' },
+        'analysis/relationship: AI service unavailable at extract stage'
+      );
+      return reply
+        .code(503)
+        .send(
+          fail(
+            'AI_UNAVAILABLE',
+            'AI 服务暂时不可用，请稍后再试。如反复出现，请检查 ANTHROPIC_BASE_URL 或换一个端点。',
+            { stage: 'extract' }
+          )
+        );
+    }
 
     // 4. 调用 wrapper
     let result: AnalysisResult;
     try {
-      result = await runTongAnalysis(extracted, {
+      result = await runTongAnalysis(extractResult.input, {
         ai: app.aiClient,
         risk_level,
       });
@@ -111,6 +133,33 @@ export async function analysisRoutes(app: FastifyInstance): Promise<void> {
       return reply
         .code(500)
         .send(fail('INTERNAL_ERROR', '关系分析暂时不可用，请稍后再试'));
+    }
+
+    // wrapper 内部捕获 AI 错误后会返回 SAFE_DEFAULT_ANALYSIS（同一引用）。
+    // 这里检测：若拿到的就是 safe default，多半 AI 又挂了 → 503
+    if (result === SAFE_DEFAULT_ANALYSIS) {
+      request.log.error(
+        { userId, stage: 'analysis', extract_degraded: extractResult.degraded },
+        'analysis/relationship: tong-analysis fell back to SAFE_DEFAULT'
+      );
+      return reply
+        .code(503)
+        .send(
+          fail(
+            'AI_UNAVAILABLE',
+            'AI 服务暂时不可用，请稍后再试。如反复出现，请检查 ANTHROPIC_BASE_URL 或换一个端点。',
+            { stage: 'analysis' }
+          )
+        );
+    }
+
+    // extract 走的是 parse_failed 兜底（AI 返回了无法解析的文本），但 wrapper 还是产出了真分析 →
+    // 仍然返回 200，但日志记录降级路径供观察
+    if (extractResult.degraded === 'parse_failed') {
+      request.log.warn(
+        { userId },
+        'analysis/relationship: extract used safe default (parse_failed) but analysis succeeded'
+      );
     }
 
     return reply.send(ok({ analysis: result }));

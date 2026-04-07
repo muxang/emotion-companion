@@ -61,14 +61,15 @@ export async function createPlan(
 
 /** 获取计划详情，含今日任务与历史打卡。 */
 export async function getPlanDetail(id: string): Promise<RecoveryPlanDetail> {
+  // 注意：后端字段是 today_task（snake_case），不是 todayTask
   const data = await fetchJson<{
     plan: RecoveryPlan;
-    todayTask: RecoveryTodayTask | null;
+    today_task: RecoveryTodayTask | null;
     checkins: RecoveryCheckin[];
   }>(`/api/recovery-plans/${id}`, { method: 'GET' });
   return {
     plan: data.plan,
-    todayTask: data.todayTask ?? null,
+    todayTask: data.today_task ?? null,
     checkins: data.checkins ?? [],
   };
 }

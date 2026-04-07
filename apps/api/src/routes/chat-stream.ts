@@ -24,6 +24,22 @@ function pickAllowedOrigin(
 
 const KEEPALIVE_MS = 15_000;
 
+const DEFAULT_SESSION_TITLE = '新对话';
+const AUTO_TITLE_MAX_CHARS = 15;
+
+/**
+ * 从首条用户消息生成会话标题：
+ * - 去掉换行/多余空白
+ * - 截取前 15 个字符
+ * - 太短或为空则返回 '新对话'
+ */
+function makeAutoTitle(text: string): string {
+  const cleaned = text.replace(/\s+/g, ' ').trim();
+  if (cleaned.length < 2) return DEFAULT_SESSION_TITLE;
+  if (cleaned.length <= AUTO_TITLE_MAX_CHARS) return cleaned;
+  return cleaned.slice(0, AUTO_TITLE_MAX_CHARS) + '…';
+}
+
 export function buildSseChunk(
   type: 'delta' | 'done' | 'error' | 'meta',
   payload: Record<string, unknown>
@@ -92,6 +108,19 @@ export async function chatStreamRoutes(app: FastifyInstance): Promise<void> {
 
       // Phase 5：拉用户记录，拿到 memory_enabled 开关供 orchestrator Step 5 / 异步任务用
       const userRecord = await app.repos.users.findById(userId);
+
+      // Phase 7：首条消息自动起标题（默认还是 '新对话' 且 message_count === 0）
+      // 静默失败，不阻塞主流程
+      if (session.title === DEFAULT_SESSION_TITLE && session.message_count === 0) {
+        const autoTitle = makeAutoTitle(parsed.data.content);
+        if (autoTitle && autoTitle !== DEFAULT_SESSION_TITLE) {
+          try {
+            await app.repos.sessions.updateTitle(session.id, userId, autoTitle);
+          } catch (err) {
+            request.log.warn({ err, sessionId: session.id }, 'auto-title failed');
+          }
+        }
+      }
 
       const requestId = newRequestId();
       const env = loadEnv();

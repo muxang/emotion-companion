@@ -127,4 +127,87 @@ describe('Sessions CRUD', () => {
     });
     expect(res.statusCode).toBe(422);
   });
+
+  it('PATCH /sessions/:id 修改标题成功', async () => {
+    const token = await login('anon-session-rename-ok');
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {},
+    });
+    const id = (created.json() as { data: { session: SessionDTO } }).data
+      .session.id;
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/sessions/${id}`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { title: '这段暧昧三个月了' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { data: { session: SessionDTO } };
+    expect(body.data.session.title).toBe('这段暧昧三个月了');
+  });
+
+  it('PATCH /sessions/:id 越权访问返回 404', async () => {
+    const tokenA = await login('anon-session-rename-A');
+    const tokenB = await login('anon-session-rename-B');
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { authorization: `Bearer ${tokenA}` },
+      payload: {},
+    });
+    const id = (created.json() as { data: { session: SessionDTO } }).data
+      .session.id;
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/sessions/${id}`,
+      headers: { authorization: `Bearer ${tokenB}` },
+      payload: { title: '我偷偷改' },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('PATCH /sessions/:id 拒绝空标题 (422)', async () => {
+    const token = await login('anon-session-rename-empty');
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {},
+    });
+    const id = (created.json() as { data: { session: SessionDTO } }).data
+      .session.id;
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/sessions/${id}`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { title: '   ' },
+    });
+    expect(res.statusCode).toBe(422);
+  });
+
+  it('PATCH /sessions/:id 拒绝超长标题 (422)', async () => {
+    const token = await login('anon-session-rename-long');
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {},
+    });
+    const id = (created.json() as { data: { session: SessionDTO } }).data
+      .session.id;
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/sessions/${id}`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { title: 'x'.repeat(200) },
+    });
+    expect(res.statusCode).toBe(422);
+  });
 });

@@ -8,6 +8,33 @@ export interface MessageBubbleProps {
   showTimestamp?: boolean;
 }
 
+/**
+ * 三点跳动动画。streaming 期间 AI 还没产出第一个字符时显示，
+ * 让用户明确感知到"模型正在思考"。
+ */
+function TypingDots(): JSX.Element {
+  return (
+    <span
+      className="inline-flex items-end gap-1 py-1"
+      aria-label="正在输入"
+      data-testid="typing-dots"
+    >
+      <span
+        className="h-1.5 w-1.5 animate-bounce rounded-full bg-warm-700/40"
+        style={{ animationDelay: '0ms' }}
+      />
+      <span
+        className="h-1.5 w-1.5 animate-bounce rounded-full bg-warm-700/40"
+        style={{ animationDelay: '150ms' }}
+      />
+      <span
+        className="h-1.5 w-1.5 animate-bounce rounded-full bg-warm-700/40"
+        style={{ animationDelay: '300ms' }}
+      />
+    </span>
+  );
+}
+
 function renderAssistantContent(text: string): JSX.Element[] {
   const nodes = parseMiniMarkdown(text);
   return nodes.map((n, idx) => {
@@ -37,7 +64,7 @@ export function MessageBubble({
         ) : message.content ? (
           <>{renderAssistantContent(message.content)}</>
         ) : message.streaming ? (
-          '…'
+          <TypingDots />
         ) : (
           ''
         )}

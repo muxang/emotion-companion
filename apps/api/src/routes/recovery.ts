@@ -82,6 +82,8 @@ export async function recoveryRoutes(app: FastifyInstance): Promise<void> {
     const checkins = await app.repos.recovery.listCheckinsByPlan(plan.id);
 
     // 今日任务：仅在 active 时尝试生成；completed/paused 不再生成
+    // ⚠️ 必须设硬超时：详情接口是 GET，不能让它因为 AI 代理 502 而 hang 60s。
+    //   超过 5s 立即降级到 makeSafeDefaultTask，让前端能正常拿到 plan + checkins。
     let todayTask: RecoveryTask | null = null;
     if (plan.status === 'active') {
       try {
@@ -90,11 +92,10 @@ export async function recoveryRoutes(app: FastifyInstance): Promise<void> {
             plan_type: plan.plan_type,
             day_index: plan.current_day,
           },
-          { ai: app.aiClient, risk_level: 'low' }
+          { ai: app.aiClient, risk_level: 'low', timeoutMs: 5_000 }
         );
       } catch (err) {
         if (err instanceof BlockedByRiskError) {
-          // 第二道防线：理论上详情接口不会传 critical，但保险起见走兜底
           request.log.warn(
             { userId, plan_id: plan.id },
             'recovery-plan blocked by risk gate, using safe default'
@@ -102,7 +103,11 @@ export async function recoveryRoutes(app: FastifyInstance): Promise<void> {
           todayTask = makeSafeDefaultTask(plan.current_day);
         } else {
           request.log.warn(
-            { err, userId, plan_id: plan.id },
+            {
+              err: err instanceof Error ? err.message : String(err),
+              userId,
+              plan_id: plan.id,
+            },
             'runRecoveryPlan failed, using safe default'
           );
           todayTask = makeSafeDefaultTask(plan.current_day);

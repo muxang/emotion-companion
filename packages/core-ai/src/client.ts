@@ -37,6 +37,10 @@ export interface AIClientConfig {
   defaultMaxTokens: number;
   /** 可选：覆盖默认 https://api.anthropic.com，用于代理或私有网关 */
   baseURL?: string;
+  /** 单请求最多重试次数（含首次失败），默认 3。SDK 会对 408/409/429/5xx/网络错误自动重试 */
+  maxRetries?: number;
+  /** 单请求超时（毫秒），默认 60_000 */
+  requestTimeoutMs?: number;
 }
 
 export class AIClient {
@@ -50,6 +54,9 @@ export class AIClient {
     }
     this.anthropic = new Anthropic({
       apiKey: config.apiKey,
+      // 显式开启重试：默认 SDK 是 2 次，这里提到 3 次，对应 408/409/429/5xx/网络抖动
+      maxRetries: config.maxRetries ?? 3,
+      timeout: config.requestTimeoutMs ?? 60_000,
       ...(config.baseURL ? { baseURL: config.baseURL } : {}),
     });
     this.model = config.model;
@@ -170,12 +177,27 @@ function wrapAnthropicError(
     return new AIError('AI_ABORTED', 'AI 请求被中止', { cause: err });
   }
   if (err instanceof Anthropic.APIError) {
-    return new AIError(
-      'AI_REQUEST_FAILED',
-      `Anthropic API 错误：${err.message}`,
-      { status: err.status, cause: err }
-    );
+    // 上游 5xx 一般是代理 / 网关抖动；给前端更友好的短消息，
+    // 完整原文仍通过 cause 保留供日志诊断。
+    const status = err.status;
+    let friendly: string;
+    if (status === 502 || status === 503 || status === 504) {
+      friendly = `AI 服务暂时不可用（${status}），重试几次仍未成功，请稍后再试`;
+    } else if (status === 429) {
+      friendly = 'AI 服务繁忙（429），请稍后再试';
+    } else if (status === 401 || status === 403) {
+      friendly = 'AI 凭证或权限异常，请检查 ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL';
+    } else {
+      // 截断超长 body，避免把整段 JSON 错误体显示给用户
+      const head = (err.message ?? '').split('\n')[0]?.slice(0, 200) ?? '';
+      friendly = `Anthropic API 错误（${status ?? 'unknown'}）：${head}`;
+    }
+    return new AIError('AI_REQUEST_FAILED', friendly, {
+      status: status,
+      cause: err,
+    });
   }
-  const message = err instanceof Error ? err.message : String(err);
+  const raw = err instanceof Error ? err.message : String(err);
+  const message = raw.split('\n')[0]?.slice(0, 200) ?? raw;
   return new AIError('AI_REQUEST_FAILED', message, { cause: err });
 }

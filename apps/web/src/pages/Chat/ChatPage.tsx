@@ -19,28 +19,51 @@ export function ChatPage(): JSX.Element {
 
   const sessions = useSessionStore((s) => s.sessions);
   const currentSessionId = useSessionStore((s) => s.currentSessionId);
+  const currentMessages = useSessionStore((s) => s.currentMessages);
   const fetchSessions = useSessionStore((s) => s.fetchSessions);
   const ensureSession = useSessionStore((s) => s.ensureSession);
   const newSession = useSessionStore((s) => s.newSession);
   const removeSession = useSessionStore((s) => s.removeSession);
   const selectSession = useSessionStore((s) => s.selectSession);
+  const renameSession = useSessionStore((s) => s.renameSession);
 
   const messages = useChatStore((s) => s.messages);
+  const hydratedSessionId = useChatStore((s) => s.hydratedSessionId);
   const status = useChatStore((s) => s.status);
   const error = useChatStore((s) => s.error);
   const send = useChatStore((s) => s.send);
   const abort = useChatStore((s) => s.abort);
   const reset = useChatStore((s) => s.reset);
+  const hydrateFromDb = useChatStore((s) => s.hydrateFromDb);
 
   const [creating, setCreating] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState<string>('');
 
   useEffect(() => {
     if (authStatus === 'authed') {
       void fetchSessions();
     }
   }, [authStatus, fetchSessions]);
+
+  // 自动选第一个会话：当无 currentSessionId 但已有会话列表时（页面首次进入或会话被删后）
+  useEffect(() => {
+    if (authStatus !== 'authed') return;
+    if (currentSessionId) return;
+    if (sessions.length === 0) return;
+    void selectSession(sessions[0]!.id);
+  }, [authStatus, sessions, currentSessionId, selectSession]);
+
+  // 从 sessionStore.currentMessages（DB 载入）hydrate 到 chatStore，
+  // 这样跨页面切换 / 切换会话回来时不会丢失历史消息。
+  // 流式期间禁止覆盖（hydrateFromDb 内部已处理）。
+  useEffect(() => {
+    if (!currentSessionId) return;
+    if (currentSessionId === hydratedSessionId) return;
+    hydrateFromDb(currentSessionId, currentMessages);
+  }, [currentSessionId, currentMessages, hydratedSessionId, hydrateFromDb]);
 
   const currentSession = sessions.find((s) => s.id === currentSessionId);
 
@@ -72,6 +95,36 @@ export function ChatPage(): JSX.Element {
     setInputValue(topic);
   };
 
+  const handleStartRename = (id: string, currentTitle: string): void => {
+    setEditingSessionId(id);
+    setEditingTitle(currentTitle);
+  };
+
+  const handleCancelRename = (): void => {
+    setEditingSessionId(null);
+    setEditingTitle('');
+  };
+
+  const handleCommitRename = async (id: string): Promise<void> => {
+    const next = editingTitle.trim();
+    if (next.length === 0 || next.length > 60) {
+      handleCancelRename();
+      return;
+    }
+    const original = sessions.find((s) => s.id === id)?.title;
+    if (next === original) {
+      handleCancelRename();
+      return;
+    }
+    try {
+      await renameSession(id, next);
+    } catch {
+      /* store 已回滚并设 error */
+    } finally {
+      handleCancelRename();
+    }
+  };
+
   if (authStatus !== 'authed') {
     return (
       <div className="flex h-screen items-center justify-center text-warm-700/70">
@@ -97,30 +150,83 @@ export function ChatPage(): JSX.Element {
         </button>
       </div>
       <ul className="flex-1 overflow-y-auto">
-        {sessions.map((s) => (
-          <li
-            key={s.id}
-            className={[
-              'group flex cursor-pointer items-center justify-between px-4 py-3 text-sm',
-              s.id === currentSessionId
-                ? 'bg-warm-50 text-warm-700'
-                : 'text-warm-700/70 hover:bg-warm-50',
-            ].join(' ')}
-            onClick={() => void handleSelect(s.id)}
-          >
-            <span className="truncate">{truncate(s.title, 15)}</span>
-            <button
-              type="button"
-              className="ml-2 hidden text-xs text-warm-700/40 group-hover:inline"
-              onClick={(e) => {
+        {sessions.map((s) => {
+          const isEditing = editingSessionId === s.id;
+          return (
+            <li
+              key={s.id}
+              className={[
+                'group flex items-center justify-between gap-2 px-4 py-3 text-sm',
+                isEditing ? '' : 'cursor-pointer',
+                s.id === currentSessionId
+                  ? 'bg-warm-50 text-warm-700'
+                  : 'text-warm-700/70 hover:bg-warm-50',
+              ].join(' ')}
+              onClick={() => {
+                if (isEditing) return;
+                void handleSelect(s.id);
+              }}
+              onDoubleClick={(e) => {
                 e.stopPropagation();
-                void removeSession(s.id);
+                handleStartRename(s.id, s.title);
               }}
             >
-              删除
-            </button>
-          </li>
-        ))}
+              {isEditing ? (
+                <input
+                  autoFocus
+                  type="text"
+                  value={editingTitle}
+                  maxLength={60}
+                  onChange={(e) => setEditingTitle(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      void handleCommitRename(s.id);
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      handleCancelRename();
+                    }
+                  }}
+                  onBlur={() => void handleCommitRename(s.id)}
+                  className="flex-1 rounded-md border border-warm-300 bg-white px-2 py-1 text-sm text-warm-700 outline-none focus:border-warm-500"
+                  data-testid={`session-rename-input-${s.id}`}
+                />
+              ) : (
+                <span className="flex-1 truncate" title={s.title}>
+                  {truncate(s.title, 15)}
+                </span>
+              )}
+              {!isEditing ? (
+                <span className="hidden shrink-0 items-center gap-2 text-xs text-warm-700/40 group-hover:inline-flex">
+                  <button
+                    type="button"
+                    aria-label="重命名会话"
+                    title="重命名"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleStartRename(s.id, s.title);
+                    }}
+                    className="hover:text-warm-700"
+                  >
+                    重命名
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="删除会话"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void removeSession(s.id);
+                    }}
+                    className="hover:text-rose-600"
+                  >
+                    删除
+                  </button>
+                </span>
+              ) : null}
+            </li>
+          );
+        })}
         {sessions.length === 0 ? (
           <li className="px-4 py-6 text-center text-xs text-warm-700/40">
             还没有对话,点上方"新建"开始
@@ -243,6 +349,14 @@ export function ChatPage(): JSX.Element {
         {error ? (
           <div className="border-t border-rose-200 bg-rose-50 px-4 py-2 text-xs text-rose-700">
             {error}
+          </div>
+        ) : null}
+        {status === 'streaming' ? (
+          <div
+            className="border-t border-warm-100 bg-warm-50 px-4 py-1.5 text-center text-xs text-warm-700/60"
+            data-testid="chat-streaming-hint"
+          >
+            正在感受你的话,通常需要 5–10 秒…
           </div>
         ) : null}
         <ChatInput

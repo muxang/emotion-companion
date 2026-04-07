@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { MessageDTO } from '@emotion/shared';
 import { streamChat } from '../api/stream.js';
 
 export interface ChatViewMessage {
@@ -15,10 +16,19 @@ type ChatStatus = 'idle' | 'streaming' | 'error';
 
 interface ChatState {
   messages: ChatViewMessage[];
+  /** 当前已经加载到内存的会话 id；用于避免重复 hydrate */
+  hydratedSessionId: string | null;
   status: ChatStatus;
   error: string | null;
   abortController: AbortController | null;
   reset: (initial?: ChatViewMessage[]) => void;
+  /**
+   * 把 DB 拉到的 MessageDTO[] 装载为视图消息。
+   * - 仅 user / assistant 角色（system 跳过）
+   * - 流式期间不会被覆盖（status === 'streaming' 时静默忽略）
+   * - 用 sessionId 标记已 hydrate，避免重复执行
+   */
+  hydrateFromDb: (sessionId: string, dtos: MessageDTO[]) => void;
   send: (sessionId: string, content: string) => Promise<void>;
   abort: () => void;
 }
@@ -31,6 +41,7 @@ function nextId(): string {
 
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
+  hydratedSessionId: null,
   status: 'idle',
   error: null,
   abortController: null,
@@ -38,6 +49,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
   reset(initial = []) {
     set({
       messages: initial,
+      hydratedSessionId: null,
+      status: 'idle',
+      error: null,
+      abortController: null,
+    });
+  },
+
+  hydrateFromDb(sessionId, dtos) {
+    // 流式期间禁止覆盖（避免把正在显示的 streaming 占位消息抹掉）
+    if (get().status === 'streaming') return;
+    const messages: ChatViewMessage[] = dtos
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .map((m) => ({
+        id: m.id,
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+        createdAt: m.created_at,
+      }));
+    set({
+      messages,
+      hydratedSessionId: sessionId,
       status: 'idle',
       error: null,
       abortController: null,

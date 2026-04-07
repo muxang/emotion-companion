@@ -26,8 +26,21 @@ async function bootstrap(): Promise<void> {
     apiKey: env.ANTHROPIC_API_KEY,
     model: env.AI_MODEL,
     defaultMaxTokens: env.AI_MAX_TOKENS,
+    maxRetries: 3,
+    requestTimeoutMs: 60_000,
     ...(env.ANTHROPIC_BASE_URL ? { baseURL: env.ANTHROPIC_BASE_URL } : {}),
   });
+  // 启动时打印一次 AI 端点配置，便于诊断 502 / 凭证问题
+  // eslint-disable-next-line no-console
+  console.info(
+    '[ai] client ready',
+    JSON.stringify({
+      model: env.AI_MODEL,
+      baseURL: env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com (default)',
+      maxRetries: 3,
+      requestTimeoutMs: 60_000,
+    })
+  );
 
   // Phase 5：记忆依赖闭包（packages/memory 直接持有 pool + ai）
   const memoryDeps: OrchestratorMemoryDeps = {
