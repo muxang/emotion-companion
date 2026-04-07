@@ -211,6 +211,12 @@ export function ChatPage(): JSX.Element {
               关系分析
             </Link>
             <Link
+              to="/recovery"
+              className="text-xs text-warm-700/60 hover:text-warm-700"
+            >
+              恢复计划
+            </Link>
+            <Link
               to="/growth"
               className="text-xs text-warm-700/60 hover:text-warm-700"
             >
