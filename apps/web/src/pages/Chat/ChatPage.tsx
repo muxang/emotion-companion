@@ -210,6 +210,18 @@ export function ChatPage(): JSX.Element {
             >
               关系分析
             </Link>
+            <Link
+              to="/growth"
+              className="text-xs text-warm-700/60 hover:text-warm-700"
+            >
+              成长
+            </Link>
+            <Link
+              to="/settings"
+              className="text-xs text-warm-700/60 hover:text-warm-700"
+            >
+              设置
+            </Link>
             <button
               type="button"
               className="text-xs text-warm-700/60 md:hidden"

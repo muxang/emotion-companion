@@ -1,6 +1,8 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { ChatPage } from './pages/Chat/ChatPage.js';
 import { AnalysisPage } from './pages/Analysis/AnalysisPage.js';
+import { GrowthPage } from './pages/Growth/GrowthPage.js';
+import { SettingsPage } from './pages/Settings/SettingsPage.js';
 import { useAuth } from './hooks/useAuth.js';
 
 export function App(): JSX.Element {
@@ -12,6 +14,8 @@ export function App(): JSX.Element {
       <Route path="/" element={<Navigate to="/chat" replace />} />
       <Route path="/chat" element={<ChatPage />} />
       <Route path="/analysis" element={<AnalysisPage />} />
+      <Route path="/growth" element={<GrowthPage />} />
+      <Route path="/settings" element={<SettingsPage />} />
       <Route path="*" element={<Navigate to="/chat" replace />} />
     </Routes>
   );
