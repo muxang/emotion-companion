@@ -1,27 +1,21 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore.js';
-import { useSessionStore } from '../../stores/sessionStore.js';
 import { useAnalysis } from '../../hooks/useAnalysis.js';
 
-const RELATIONSHIP_STAGES = [
-  { value: 'ambiguous', label: '暧昧中' },
-  { value: 'in-relationship', label: '恋爱中' },
-  { value: 'after-breakup', label: '分手后' },
-  { value: 'lost-contact', label: '失联中' },
-] as const;
+const TEXT_MIN = 10;
+const TEXT_MAX = 1000;
+
+const PLACEHOLDER =
+  '描述你的情况，比如：暧昧三个月，他从不主动联系我，只在深夜回消息，我不知道要不要继续等。';
 
 export function AnalysisPage(): JSX.Element {
   const authStatus = useAuthStore((s) => s.status);
   const authError = useAuthStore((s) => s.error);
-  const ensureSession = useSessionStore((s) => s.ensureSession);
 
   const { result, status, error, analyze, reset } = useAnalysis();
 
-  const [userGoal, setUserGoal] = useState('');
-  const [stage, setStage] = useState<string>(RELATIONSHIP_STAGES[0].value);
-  const [factsText, setFactsText] = useState('');
-  const [userState, setUserState] = useState('');
+  const [userText, setUserText] = useState('');
 
   useEffect(() => {
     return () => {
@@ -29,28 +23,16 @@ export function AnalysisPage(): JSX.Element {
     };
   }, [reset]);
 
+  const trimmedLen = userText.trim().length;
   const canSubmit =
-    userGoal.trim().length > 0 &&
-    factsText.trim().length > 0 &&
-    userState.trim().length > 0 &&
+    trimmedLen >= TEXT_MIN &&
+    trimmedLen <= TEXT_MAX &&
     status !== 'loading';
 
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
     if (!canSubmit) return;
-    const facts = factsText
-      .split('\n')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-
-    const sessionId = await ensureSession();
-    await analyze({
-      session_id: sessionId,
-      user_goal: userGoal.trim(),
-      relationship_stage: stage,
-      facts,
-      user_state: userState.trim(),
-    });
+    await analyze(userText.trim());
   };
 
   if (authStatus !== 'authed') {
@@ -86,77 +68,39 @@ export function AnalysisPage(): JSX.Element {
             分析基于你提供的事实，结论会保留不确定性，仅供参考。
           </p>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-3">
             <div>
               <label
-                htmlFor="user-goal"
+                htmlFor="analysis-text"
                 className="mb-1 block text-xs text-warm-700/70"
               >
-                你想弄清楚什么
-              </label>
-              <input
-                id="user-goal"
-                type="text"
-                value={userGoal}
-                onChange={(e) => setUserGoal(e.target.value)}
-                placeholder="你想弄清楚什么？如：判断对方是否还有感情"
-                className="w-full rounded-md border border-warm-100 bg-warm-50/50 px-3 py-2 text-sm text-warm-700 placeholder:text-warm-700/30 focus:border-warm-500 focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="stage"
-                className="mb-1 block text-xs text-warm-700/70"
-              >
-                关系阶段
-              </label>
-              <select
-                id="stage"
-                value={stage}
-                onChange={(e) => setStage(e.target.value)}
-                className="w-full rounded-md border border-warm-100 bg-warm-50/50 px-3 py-2 text-sm text-warm-700 focus:border-warm-500 focus:outline-none"
-              >
-                {RELATIONSHIP_STAGES.map((s) => (
-                  <option key={s.value} value={s.value}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label
-                htmlFor="facts"
-                className="mb-1 block text-xs text-warm-700/70"
-              >
-                客观事实（每行一条）
+                你想说说什么？
               </label>
               <textarea
-                id="facts"
-                value={factsText}
-                onChange={(e) => setFactsText(e.target.value)}
-                placeholder="描述你观察到的具体事实，每行一条"
+                id="analysis-text"
+                aria-label="情况描述"
+                value={userText}
+                onChange={(e) => setUserText(e.target.value.slice(0, TEXT_MAX))}
+                placeholder={PLACEHOLDER}
                 rows={6}
-                className="w-full resize-none rounded-md border border-warm-100 bg-warm-50/50 px-3 py-2 text-sm text-warm-700 placeholder:text-warm-700/30 focus:border-warm-500 focus:outline-none"
+                className="min-h-[8rem] w-full resize-y rounded-md border border-warm-100 bg-warm-50/50 px-3 py-2 text-sm leading-relaxed text-warm-700 placeholder:text-warm-700/30 focus:border-warm-500 focus:outline-none"
               />
-            </div>
-
-            <div>
-              <label
-                htmlFor="user-state"
-                className="mb-1 block text-xs text-warm-700/70"
-              >
-                你现在的状态
-              </label>
-              <input
-                id="user-state"
-                type="text"
-                value={userState}
-                onChange={(e) => setUserState(e.target.value)}
-                placeholder="你现在的情绪状态"
-                className="w-full rounded-md border border-warm-100 bg-warm-50/50 px-3 py-2 text-sm text-warm-700 placeholder:text-warm-700/30 focus:border-warm-500 focus:outline-none"
-              />
+              <div className="mt-1 flex items-center justify-between text-xs">
+                <span
+                  className={
+                    trimmedLen > 0 && trimmedLen < TEXT_MIN
+                      ? 'text-amber-600'
+                      : 'text-warm-700/50'
+                  }
+                >
+                  {trimmedLen > 0 && trimmedLen < TEXT_MIN
+                    ? `至少 ${TEXT_MIN} 字`
+                    : '事实越具体，分析越准确'}
+                </span>
+                <span className="text-warm-700/50">
+                  已输入 {trimmedLen} / {TEXT_MAX} 字
+                </span>
+              </div>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-1">
@@ -173,7 +117,7 @@ export function AnalysisPage(): JSX.Element {
 
         {status === 'loading' ? (
           <div className="mt-6 rounded-lg border border-warm-100 bg-white p-5 text-sm text-warm-700/70">
-            分析中…
+            AI 正在分析中，通常需要 10-20 秒…
           </div>
         ) : null}
 
@@ -196,7 +140,9 @@ function AnalysisResultCards({
 }: {
   result: import('@emotion/shared').AnalysisResult;
 }): JSX.Element {
-  const confidencePct = Math.round(result.confidence * 100);
+  const confidencePct = Math.round((result.confidence ?? 0) * 100);
+  const evidence = result.evidence ?? [];
+  const risks = result.risks ?? [];
   return (
     <div className="mt-6 space-y-4" data-testid="analysis-result">
       <article className="rounded-lg border border-warm-100 bg-white p-5">
@@ -206,11 +152,11 @@ function AnalysisResultCards({
         </p>
       </article>
 
-      {result.evidence.length > 0 ? (
+      {evidence.length > 0 ? (
         <article className="rounded-lg border border-warm-100 bg-white p-5">
           <h3 className="mb-2 text-xs font-medium text-warm-700/60">证据</h3>
           <ul className="space-y-1 text-sm text-warm-700">
-            {result.evidence.map((item, idx) => (
+            {evidence.map((item, idx) => (
               <li key={idx} className="flex gap-2">
                 <span className="text-warm-700/40">·</span>
                 <span>{item}</span>
@@ -220,13 +166,13 @@ function AnalysisResultCards({
         </article>
       ) : null}
 
-      {result.risks.length > 0 ? (
+      {risks.length > 0 ? (
         <article className="rounded-lg border border-amber-200 bg-amber-50 p-5">
           <h3 className="mb-2 text-xs font-medium text-amber-700/80">
             风险提示
           </h3>
           <ul className="space-y-1 text-sm text-amber-900">
-            {result.risks.map((risk, idx) => (
+            {risks.map((risk, idx) => (
               <li key={idx} className="flex gap-2">
                 <span className="text-amber-600/60">·</span>
                 <span>{risk}</span>

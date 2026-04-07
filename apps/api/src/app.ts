@@ -9,6 +9,7 @@ import { healthRoutes } from './routes/health.js';
 import { authRoutes } from './routes/auth.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { chatStreamRoutes } from './routes/chat-stream.js';
+import { analysisRoutes } from './routes/analysis.js';
 import type { UserRepository } from './db/repositories/users.js';
 import type { SessionRepository } from './db/repositories/sessions.js';
 import type { MessageRepository } from './db/repositories/messages.js';
@@ -59,6 +60,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(authRoutes, { prefix: '/api' });
   await app.register(sessionRoutes, { prefix: '/api' });
   await app.register(chatStreamRoutes, { prefix: '/api' });
+  await app.register(analysisRoutes, { prefix: '/api' });
 
   return app;
 }

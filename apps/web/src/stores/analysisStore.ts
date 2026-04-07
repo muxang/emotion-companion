@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { AnalysisResult } from '@emotion/shared';
-import { requestAnalysis, type RequestAnalysisInput } from '../api/analysis.js';
+import { requestAnalysis } from '../api/analysis.js';
 
 export type AnalysisStatus = 'idle' | 'loading' | 'success' | 'error';
 
@@ -8,7 +8,7 @@ interface AnalysisState {
   result: AnalysisResult | null;
   status: AnalysisStatus;
   error: string | null;
-  analyze: (input: RequestAnalysisInput) => Promise<void>;
+  analyze: (userText: string) => Promise<void>;
   reset: () => void;
 }
 
@@ -17,10 +17,10 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
   status: 'idle',
   error: null,
 
-  async analyze(input) {
+  async analyze(userText) {
     set({ status: 'loading', error: null, result: null });
     try {
-      const result = await requestAnalysis(input);
+      const result = await requestAnalysis({ user_text: userText });
       set({ result, status: 'success', error: null });
     } catch (err) {
       set({

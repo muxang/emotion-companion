@@ -11,10 +11,12 @@ vi.mock('../src/api/analysis.js', () => ({
 import { AnalysisPage } from '../src/pages/Analysis/AnalysisPage.js';
 import { requestAnalysis } from '../src/api/analysis.js';
 import { useAuthStore } from '../src/stores/authStore.js';
-import { useSessionStore } from '../src/stores/sessionStore.js';
 import { useAnalysisStore } from '../src/stores/analysisStore.js';
 
 const mockedRequest = vi.mocked(requestAnalysis);
+
+const SAMPLE_TEXT =
+  '暧昧三个月，他从不主动联系我，只在深夜回消息，我不知道要不要继续等。';
 
 function renderPage(): void {
   render(
@@ -24,15 +26,9 @@ function renderPage(): void {
   );
 }
 
-function fillForm(): void {
-  fireEvent.change(screen.getByLabelText('你想弄清楚什么'), {
-    target: { value: '判断对方是否还有感情' },
-  });
-  fireEvent.change(screen.getByLabelText('客观事实（每行一条）'), {
-    target: { value: '最近一周回复变慢\n上周末没有约见面' },
-  });
-  fireEvent.change(screen.getByLabelText('你现在的状态'), {
-    target: { value: '焦虑反复' },
+function fillTextarea(text: string): void {
+  fireEvent.change(screen.getByLabelText('情况描述'), {
+    target: { value: text },
   });
 }
 
@@ -40,7 +36,6 @@ describe('<AnalysisPage />', () => {
   beforeEach(() => {
     mockedRequest.mockReset();
 
-    // 强制 auth 已登录
     useAuthStore.setState({
       status: 'authed',
       userId: 'u-1',
@@ -48,16 +43,6 @@ describe('<AnalysisPage />', () => {
       error: null,
     });
 
-    // 提供假的 ensureSession 实现，避免真实网络请求
-    useSessionStore.setState({
-      sessions: [],
-      currentSessionId: 'session-1',
-      currentMessages: [],
-      loading: false,
-      error: null,
-    });
-
-    // 重置分析状态
     useAnalysisStore.setState({
       result: null,
       status: 'idle',
@@ -65,7 +50,7 @@ describe('<AnalysisPage />', () => {
     });
   });
 
-  it('提交表单时调用分析接口并按结构化输入传参', async () => {
+  it('提交时只把 user_text 传给后端', async () => {
     const result: AnalysisResult = {
       analysis: '对方目前精力被工作占据，感情未必消退。',
       evidence: ['回复变慢但仍主动'],
@@ -77,22 +62,16 @@ describe('<AnalysisPage />', () => {
     mockedRequest.mockResolvedValueOnce(result);
 
     renderPage();
-    fillForm();
+    fillTextarea(SAMPLE_TEXT);
     fireEvent.click(screen.getByText('开始分析'));
 
     await waitFor(() => {
       expect(mockedRequest).toHaveBeenCalledTimes(1);
     });
-    expect(mockedRequest).toHaveBeenCalledWith({
-      session_id: 'session-1',
-      user_goal: '判断对方是否还有感情',
-      relationship_stage: 'ambiguous',
-      facts: ['最近一周回复变慢', '上周末没有约见面'],
-      user_state: '焦虑反复',
-    });
+    expect(mockedRequest).toHaveBeenCalledWith({ user_text: SAMPLE_TEXT });
   });
 
-  it('加载中显示分析中…文案', async () => {
+  it('加载中显示正在分析的友好文案', async () => {
     let resolveFn: (v: AnalysisResult) => void = () => undefined;
     mockedRequest.mockImplementationOnce(
       () =>
@@ -102,12 +81,13 @@ describe('<AnalysisPage />', () => {
     );
 
     renderPage();
-    fillForm();
+    fillTextarea(SAMPLE_TEXT);
     fireEvent.click(screen.getByText('开始分析'));
 
     await waitFor(() => {
-      // 按钮文案切换为分析中…，同时下方加载提示也出现
-      expect(screen.getAllByText('分析中…').length).toBeGreaterThanOrEqual(1);
+      expect(
+        screen.getByText('AI 正在分析中，通常需要 10-20 秒…')
+      ).toBeInTheDocument();
     });
 
     resolveFn({
@@ -132,7 +112,7 @@ describe('<AnalysisPage />', () => {
     mockedRequest.mockResolvedValueOnce(result);
 
     renderPage();
-    fillForm();
+    fillTextarea(SAMPLE_TEXT);
     fireEvent.click(screen.getByText('开始分析'));
 
     await waitFor(() => {
@@ -152,7 +132,7 @@ describe('<AnalysisPage />', () => {
     mockedRequest.mockRejectedValueOnce(new Error('服务暂时不可用'));
 
     renderPage();
-    fillForm();
+    fillTextarea(SAMPLE_TEXT);
     fireEvent.click(screen.getByText('开始分析'));
 
     await waitFor(() => {
@@ -160,9 +140,27 @@ describe('<AnalysisPage />', () => {
     });
   });
 
-  it('字段未填齐时提交按钮被禁用', () => {
+  it('文本未达到最少 10 字时按钮被禁用', () => {
     renderPage();
     const button = screen.getByText('开始分析') as HTMLButtonElement;
     expect(button.disabled).toBe(true);
+
+    fillTextarea('太短了'); // 3 字
+    expect(button.disabled).toBe(true);
+  });
+
+  it('达到 10 字后按钮可用', () => {
+    renderPage();
+    fillTextarea('这是一段足够长的描述用于测试');
+    const button = screen.getByText('开始分析') as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+  });
+
+  it('字数提示展示已输入字符数', () => {
+    renderPage();
+    fillTextarea(SAMPLE_TEXT);
+    expect(
+      screen.getByText(`已输入 ${SAMPLE_TEXT.length} / 1000 字`)
+    ).toBeInTheDocument();
   });
 });

@@ -1,5 +1,4 @@
 import { useAnalysisStore } from '../stores/analysisStore.js';
-import type { RequestAnalysisInput } from '../api/analysis.js';
 import type { AnalysisResult } from '@emotion/shared';
 import type { AnalysisStatus } from '../stores/analysisStore.js';
 
@@ -10,7 +9,7 @@ export function useAnalysis(): {
   result: AnalysisResult | null;
   status: AnalysisStatus;
   error: string | null;
-  analyze: (input: RequestAnalysisInput) => Promise<void>;
+  analyze: (userText: string) => Promise<void>;
   reset: () => void;
 } {
   const result = useAnalysisStore((s) => s.result);
