@@ -29,7 +29,13 @@
       "Bash(ls:*)",
       "Bash(git stash:*)",
       "Bash(pnpm --filter web test)",
-      "Bash(pnpm --filter @emotion/api --filter @emotion/core-ai run test)"
+      "Bash(pnpm --filter @emotion/api --filter @emotion/core-ai run test)",
+      "Bash(bash -n E:/ai/project/emotion/source/scripts/vps/setup.sh)",
+      "Bash(bash -n E:/ai/project/emotion/source/scripts/vps/deploy.sh)",
+      "Bash(bash -n E:/ai/project/emotion/source/scripts/vps/config.example.sh)",
+      "Bash(git:*)",
+      "Bash(bash -n E:/ai/project/emotion/source/scripts/vps/config.sh)",
+      "Bash(bash -n E:/ai/project/emotion/source/scripts/vps/bootstrap.sh)"
     ]
   }
 }

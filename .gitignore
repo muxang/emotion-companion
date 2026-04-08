@@ -28,3 +28,6 @@ apps/web/dist
 apps/api/dist
 packages/*/dist
 packages/skills/*/dist
+
+# VPS 部署脚本里用户的本地配置（含域名/邮箱，不进仓库）
+scripts/vps/config.sh

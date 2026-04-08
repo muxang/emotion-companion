@@ -1,0 +1,30 @@
+[Unit]
+Description=Emotion Companion API
+After=network.target
+
+[Service]
+Type=simple
+User=__APP_USER__
+WorkingDirectory=__APP_DIR__
+# 用 Node 自带的 --env-file 读取 apps/api/.env（Node 20.6+）
+ExecStart=/usr/bin/node --env-file=__APP_DIR__/apps/api/.env __APP_DIR__/apps/api/dist/index.js
+Restart=on-failure
+RestartSec=3
+# 防止上游抖动时一秒内重启过多次
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+# 日志走 journald，可用 `journalctl -u __SERVICE_NAME__ -f` 查看
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=__SERVICE_NAME__
+
+# 基本安全加固
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=__APP_DIR__
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

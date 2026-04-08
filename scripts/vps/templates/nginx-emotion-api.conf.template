@@ -1,0 +1,39 @@
+# Emotion Companion API - Nginx 反代配置
+# 模板里的 __API_DOMAIN__ / __NODE_PORT__ 由 setup.sh 替换为实际值
+#
+# 关键点：
+#  - SSE 必须 proxy_buffering off + 长 read_timeout
+#  - certbot --nginx 会在这个文件里追加 listen 443 ssl 与证书路径
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __API_DOMAIN__;
+
+    # 让 certbot 能完成 HTTP-01 challenge
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+
+    # 其他流量在没有 HTTPS 之前先 200，certbot 会改写这里
+    location / {
+        proxy_pass http://127.0.0.1:__NODE_PORT__;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # SSE / 长连接关键设置
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_set_header Connection '';
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        chunked_transfer_encoding on;
+    }
+
+    client_max_body_size 2m;
+    # 关闭 nginx 默认的 502 自定义错误页，让后端的 SSE error 帧能透传
+    proxy_intercept_errors off;
+}
