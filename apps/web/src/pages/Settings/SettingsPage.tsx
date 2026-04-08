@@ -62,7 +62,7 @@ export function SettingsPage(): JSX.Element {
   return (
     <div className="flex min-h-screen w-full flex-col bg-neutral-50">
       <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-3">
-        <h1 className="text-sm font-medium text-neutral-800">设置</h1>
+        <h1 className="text-[15px] font-semibold text-neutral-800">设置</h1>
         <nav className="flex gap-4 text-xs text-neutral-400">
           <Link to="/chat" className="hover:text-primary-600">
             对话
@@ -99,8 +99,8 @@ export function SettingsPage(): JSX.Element {
         <section className="mb-4 rounded-lg border border-neutral-200 bg-white p-5">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <h2 className="text-sm font-medium text-neutral-800">长期记忆</h2>
-              <p className="mt-1 text-xs text-neutral-400">
+              <h2 className="text-[16px] font-medium text-neutral-800">长期记忆</h2>
+              <p className="mt-1 text-[14px] text-neutral-400">
                 开启后,系统会记住你提到的关键事件与关系对象,以便后续对话更连贯。
               </p>
             </div>
@@ -127,7 +127,7 @@ export function SettingsPage(): JSX.Element {
           </div>
           {!memoryEnabled ? (
             <p
-              className="mt-3 rounded-md bg-primary-50 px-3 py-2 text-xs text-neutral-400"
+              className="mt-3 rounded-md bg-primary-50 px-3 py-2 text-[13px] text-neutral-400"
               data-testid="memory-off-hint"
             >
               关闭后新对话不再记录长期记忆
@@ -137,8 +137,8 @@ export function SettingsPage(): JSX.Element {
 
         {/* 语气偏好 */}
         <section className="rounded-lg border border-neutral-200 bg-white p-5">
-          <h2 className="text-sm font-medium text-neutral-800">回复语气偏好</h2>
-          <p className="mt-1 text-xs text-neutral-400">
+          <h2 className="text-[16px] font-medium text-neutral-800">回复语气偏好</h2>
+          <p className="mt-1 text-[14px] text-neutral-400">
             选择你希望 AI 回复时倾向的语气风格。
           </p>
           <div className="mt-4 grid gap-2 sm:grid-cols-3">
@@ -159,10 +159,10 @@ export function SettingsPage(): JSX.Element {
                       : 'border-neutral-200 bg-white hover:border-primary-200 hover:bg-primary-50',
                   ].join(' ')}
                 >
-                  <div className="text-sm font-medium text-neutral-800">
+                  <div className="text-[14px] font-medium text-neutral-800">
                     {opt.title}
                   </div>
-                  <div className="mt-1 text-xs text-neutral-400">{opt.desc}</div>
+                  <div className="mt-1 text-[13px] text-neutral-400">{opt.desc}</div>
                 </button>
               );
             })}

@@ -100,7 +100,7 @@ export function GrowthPage(): JSX.Element {
   return (
     <div className="flex min-h-screen w-full flex-col bg-neutral-50">
       <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-3">
-        <h1 className="text-sm font-medium text-neutral-800">我的成长记录</h1>
+        <h1 className="text-[15px] font-semibold text-neutral-800">我的成长记录</h1>
         <nav className="flex gap-4 text-xs text-neutral-400">
           <Link to="/chat" className="hover:text-primary-600">
             对话
@@ -138,7 +138,7 @@ export function GrowthPage(): JSX.Element {
 
         {!loading && !error && feed.events.length === 0 && feed.entities.length === 0 && feed.summaries.length === 0 ? (
           <div
-            className="rounded-lg border border-neutral-200 bg-white p-8 text-center text-sm text-neutral-400"
+            className="rounded-lg border border-neutral-200 bg-white p-8 text-center text-[15px] text-neutral-400"
             data-testid="growth-empty"
           >
             还没有记录,多聊几次后这里会出现你的成长足迹
@@ -160,7 +160,7 @@ export function GrowthPage(): JSX.Element {
         <div className="mt-8 flex justify-end">
           <button
             type="button"
-            className="rounded-md border border-rose-200 bg-white px-4 py-2 text-xs text-rose-600 hover:bg-rose-50"
+            className="rounded-md border border-rose-200 bg-white px-4 py-2 text-[14px] text-rose-600 hover:bg-rose-50"
             onClick={() => setConfirmOpen(true)}
             disabled={deleting}
           >
@@ -229,7 +229,7 @@ function SummariesSection({
             key={s.id}
             className="rounded-lg border border-neutral-200 bg-white p-4"
           >
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-800">
+            <p className="whitespace-pre-wrap text-[14px] leading-relaxed text-neutral-800">
               {s.summary_text}
             </p>
             <p className="mt-2 text-xs text-neutral-400">
@@ -302,10 +302,10 @@ function EventsSection({
             className="rounded-lg border border-neutral-200 bg-white p-4"
           >
             <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="inline-flex items-center rounded-full bg-primary-100 px-2 py-0.5 text-xs text-primary-700">
+              <span className="inline-flex items-center rounded-full bg-primary-100 px-2 py-0.5 text-[12px] text-primary-700">
                 {labelOf(evt.event_type)}
               </span>
-              <span className="text-xs text-neutral-400">
+              <span className="text-[12px] text-neutral-400">
                 {formatDate(evt.event_time ?? evt.created_at)}
               </span>
             </div>
@@ -314,7 +314,7 @@ function EventsSection({
                 关于 {evt.entity_label}
               </p>
             ) : null}
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-800">
+            <p className="whitespace-pre-wrap text-[14px] leading-relaxed text-neutral-800">
               {evt.summary}
             </p>
           </li>

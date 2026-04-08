@@ -48,7 +48,7 @@ export function AnalysisPage(): JSX.Element {
   return (
     <div className="flex min-h-screen w-full flex-col bg-neutral-50">
       <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-3">
-        <h1 className="text-sm font-medium text-neutral-800">关系分析</h1>
+        <h1 className="text-[15px] font-semibold text-neutral-800">关系分析</h1>
         <nav className="flex gap-4 text-xs text-neutral-400">
           <Link to="/chat" className="hover:text-primary-600">
             对话
@@ -70,7 +70,7 @@ export function AnalysisPage(): JSX.Element {
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">
         <section className="rounded-lg border border-neutral-200 bg-white p-5">
-          <h2 className="mb-1 text-sm font-medium text-neutral-800">
+          <h2 className="mb-1 text-[16px] font-medium text-neutral-800">
             描述你的处境
           </h2>
           <p className="mb-4 text-xs text-neutral-400">
@@ -116,7 +116,7 @@ export function AnalysisPage(): JSX.Element {
               <button
                 type="submit"
                 disabled={!canSubmit}
-                className="rounded-xl bg-primary-500 px-4 py-2 text-sm text-white hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-xl bg-primary-500 px-4 py-2 text-[14px] font-medium text-white hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {status === 'loading' ? '分析中…' : '开始分析'}
               </button>
@@ -199,7 +199,7 @@ function AnalysisResultCards({
       </article>
 
       <article className="rounded-lg border border-neutral-200 bg-white p-5">
-        <div className="mb-2 flex items-center justify-between text-xs text-neutral-400">
+        <div className="mb-2 flex items-center justify-between text-[13px] text-neutral-400">
           <span>置信度</span>
           <span>{confidencePct}%</span>
         </div>
@@ -215,7 +215,7 @@ function AnalysisResultCards({
             style={{ width: `${confidencePct}%` }}
           />
         </div>
-        <p className="mt-2 text-xs text-neutral-400">
+        <p className="mt-2 text-[13px] text-neutral-400">
           以上仅为基于已知事实的推断，请保留你自己的判断空间。
         </p>
       </article>

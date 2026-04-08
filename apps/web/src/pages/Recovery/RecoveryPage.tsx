@@ -146,7 +146,7 @@ export function RecoveryPage(): JSX.Element {
   return (
     <div className="flex min-h-screen w-full flex-col bg-neutral-50">
       <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-3">
-        <h1 className="text-sm font-medium text-neutral-800">恢复计划</h1>
+        <h1 className="text-[15px] font-semibold text-neutral-800">恢复计划</h1>
         <nav className="flex gap-4 text-xs text-neutral-400">
           <Link to="/chat" className="hover:text-primary-600">
             对话
@@ -204,13 +204,13 @@ export function RecoveryPage(): JSX.Element {
                   onClick={() => void handleCreate(opt.type)}
                   disabled={creatingType !== null}
                 >
-                  <h3 className="text-sm font-medium text-neutral-800">
+                  <h3 className="text-[16px] font-medium text-neutral-800">
                     {opt.title}
                   </h3>
-                  <p className="mt-2 text-xs text-neutral-600">
+                  <p className="mt-2 text-[14px] text-neutral-500">
                     {opt.description}
                   </p>
-                  <p className="mt-3 text-xs text-neutral-400">
+                  <p className="mt-3 text-[13px] text-neutral-400">
                     共 {opt.totalDays} 天 ·
                     {creatingType === opt.type ? ' 创建中…' : ' 点击开始'}
                   </p>
@@ -231,7 +231,7 @@ export function RecoveryPage(): JSX.Element {
                 <h2 className="text-base font-medium text-neutral-800">
                   {planTitle(currentPlan)}
                 </h2>
-                <span className="text-xs text-neutral-400">
+                <span className="text-[14px] text-neutral-400">
                   Day {currentPlan.current_day} / {currentPlan.total_days}
                 </span>
               </div>
@@ -256,25 +256,25 @@ export function RecoveryPage(): JSX.Element {
                 className="rounded-xl border border-primary-200 bg-primary-50 p-5"
                 data-testid="recovery-today-task"
               >
-                <h3 className="mb-2 text-sm font-medium text-neutral-800">
+                <h3 className="mb-2 text-[15px] font-medium text-neutral-800">
                   今日任务
                 </h3>
-                <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-800">
+                <p className="whitespace-pre-wrap text-[15px] leading-[1.8] text-neutral-800">
                   {todayTask.task}
                 </p>
                 <div className="mt-4 rounded-lg bg-white/60 p-3">
-                  <p className="text-xs text-neutral-600">
+                  <p className="text-[14px] text-neutral-500">
                     思考一下:{todayTask.reflection_prompt}
                   </p>
                 </div>
-                <p className="mt-3 text-xs text-neutral-400">
+                <p className="mt-3 text-[14px] text-neutral-400">
                   💛 {todayTask.encouragement}
                 </p>
               </div>
             ) : null}
 
             <div className="rounded-xl border border-neutral-200 bg-white p-5">
-              <h3 className="mb-3 text-sm font-medium text-neutral-800">
+              <h3 className="mb-3 text-[15px] font-medium text-neutral-800">
                 今日打卡
               </h3>
               {todayCheckin ? (
@@ -291,7 +291,7 @@ export function RecoveryPage(): JSX.Element {
                 </div>
               ) : (
                 <div className="flex flex-col gap-3">
-                  <label className="text-xs text-neutral-600">
+                  <label className="text-[13px] text-neutral-600">
                     今天的心情:{moodScore} / 10
                     <input
                       type="range"
@@ -304,7 +304,7 @@ export function RecoveryPage(): JSX.Element {
                       data-testid="recovery-mood-slider"
                     />
                   </label>
-                  <label className="text-xs text-neutral-600">
+                  <label className="text-[13px] text-neutral-600">
                     今日反思(可选)
                     <textarea
                       value={reflection}
@@ -317,7 +317,7 @@ export function RecoveryPage(): JSX.Element {
                   </label>
                   <button
                     type="button"
-                    className="self-end rounded-xl bg-primary-500 px-4 py-2 text-xs text-white hover:bg-primary-600 disabled:opacity-40"
+                    className="self-end rounded-xl bg-primary-500 px-4 py-2 text-[14px] font-medium text-white hover:bg-primary-600 disabled:opacity-40"
                     onClick={() => void handleSubmitCheckin()}
                     disabled={submitting}
                     data-testid="recovery-checkin-submit"
@@ -329,7 +329,7 @@ export function RecoveryPage(): JSX.Element {
             </div>
 
             <div className="rounded-xl border border-neutral-200 bg-white p-5">
-              <h3 className="mb-3 text-sm font-medium text-neutral-800">
+              <h3 className="mb-3 text-[15px] font-medium text-neutral-800">
                 最近打卡
               </h3>
               {recentCheckins.length === 0 ? (
@@ -341,7 +341,7 @@ export function RecoveryPage(): JSX.Element {
                   {recentCheckins.map((c) => (
                     <li
                       key={c.id}
-                      className="rounded-lg border border-neutral-200 bg-neutral-100 p-3 text-xs text-neutral-800"
+                      className="rounded-lg border border-neutral-200 bg-neutral-100 p-3 text-[13px] text-neutral-800"
                     >
                       <div className="flex items-center justify-between">
                         <span>Day {c.day_index}</span>

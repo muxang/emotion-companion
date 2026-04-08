@@ -151,7 +151,7 @@ export function ChatPage(): JSX.Element {
         <h2 className="text-[14px] font-medium text-neutral-800">我的对话</h2>
         <button
           type="button"
-          className="rounded-md bg-primary-500 px-2 py-1 text-xs text-white hover:bg-primary-600"
+          className="rounded-md bg-primary-500 px-2 py-1 text-[14px] text-white hover:bg-primary-600"
           onClick={handleNewSession}
         >
           新建
@@ -246,7 +246,7 @@ export function ChatPage(): JSX.Element {
 
   const emptyState = (
     <div className="flex w-full max-w-md flex-col items-center px-6 text-center">
-      <h2 className="text-base font-medium text-neutral-800">今天想聊点什么?</h2>
+      <h2 className="text-lg font-medium text-neutral-800">今天想聊点什么?</h2>
       <p className="mt-2 text-xs text-neutral-400">
         点下面的话题快速开始,也可以直接输入。
       </p>
@@ -256,7 +256,7 @@ export function ChatPage(): JSX.Element {
             key={topic}
             type="button"
             data-testid="quick-topic"
-            className="rounded-xl border border-primary-200 bg-white px-4 py-3 text-left text-sm text-primary-600 shadow-sm hover:bg-primary-50"
+            className="rounded-xl border border-primary-200 bg-white px-4 py-3 text-left text-[14px] text-primary-600 shadow-sm hover:bg-primary-50"
             onClick={() => handleQuickTopic(topic)}
           >
             {topic}
@@ -313,7 +313,7 @@ export function ChatPage(): JSX.Element {
                 <line x1="3" y1="18" x2="21" y2="18" />
               </svg>
             </button>
-            <h1 className="text-sm font-medium text-neutral-800">
+            <h1 className="text-[15px] font-medium text-neutral-800">
               {currentSession ? truncate(currentSession.title, 15) : '情感陪伴'}
             </h1>
           </div>
@@ -328,7 +328,7 @@ export function ChatPage(): JSX.Element {
               to="/recovery"
               className="text-[14px] text-neutral-400 hover:text-primary-600"
             >
-              恢复计划
+              恢复
             </Link>
             <Link
               to="/growth"
