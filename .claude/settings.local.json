@@ -39,7 +39,13 @@
       "Bash(pnpm --filter @emotion/web run build)",
       "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('E:/ai/project/emotion/source/vercel.json', 'utf8'\\)\\)\")",
       "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('E:/ai/project/emotion/source/apps/web/vercel.json', 'utf8'\\)\\)\")",
-      "Bash(pnpm install:*)"
+      "Bash(pnpm install:*)",
+      "Bash(gh repo:*)",
+      "Bash(gh api:*)",
+      "Bash(python3 -c \"import json,base64; d=json.load\\(open\\('/tmp/skill.json'\\)\\); print\\(base64.b64decode\\(d['content']\\).decode\\('utf-8'\\)\\)\")",
+      "Bash(node -e \"const fs=require\\('fs'\\); const d=JSON.parse\\(fs.readFileSync\\('/tmp/skill.json','utf8'\\)\\); process.stdout.write\\(Buffer.from\\(d.content,'base64'\\).toString\\('utf-8'\\)\\)\")",
+      "Bash(node -e \"const fs=require\\('fs'\\); const d=JSON.parse\\(fs.readFileSync\\('skill.json','utf8'\\)\\); fs.writeFileSync\\('SKILL.md', Buffer.from\\(d.content,'base64'\\).toString\\('utf-8'\\)\\)\")",
+      "Bash(pnpm --filter @emotion/skill-tong-analysis --filter @emotion/api run test)"
     ]
   }
 }

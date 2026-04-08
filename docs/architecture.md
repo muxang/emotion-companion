@@ -695,6 +695,17 @@ function runXxx(input, deps): AsyncIterable<string>
 - 所有 prompt 都要求严格 JSON 输出
 - 严禁直接暴露给前端，必须由 orchestrator 调度（通过 `BlockedByRiskError` 第二道防线强制约束）
 
+### tong-analysis 的特殊说明
+
+`tong-analysis` 的 SYSTEM_PROMPT 思维框架**蒸馏自外部开源 skill**：
+
+- **来源**：[hotcoffeeshake/tong-jincheng-skill](https://github.com/hotcoffeeshake/tong-jincheng-skill)（MIT License）
+- **采纳内容**：5 个心智模型 + 9 条决策启发式
+- **故意不采纳**：第一人称角色扮演、宣判式金句（会被 `no_verdict_as_analysis` guard 拦截）、口语化称谓
+- **完整设计文档**：见 [`packages/skills/tong-analysis/PROMPT_DESIGN.md`](../packages/skills/tong-analysis/PROMPT_DESIGN.md)
+
+一句话：**我们抄了他的思维内核，没抄他的语气**。这样既能用上验证过的关系洞察框架，又不破坏我们的 Final Response Guard 七项检查。
+
 ### 各 skill 的输入输出（简化版）
 
 ```ts
@@ -1080,6 +1091,10 @@ location / {
 ---
 
 ## 十七、运维操作手册
+
+> 完整版请看 **[`docs/runbook.md`](./runbook.md)** —— 那里有日志查看的所有姿势、故障 playbook、应急回滚、常用 alias 配置等。
+>
+> 这里只放最常用的几条。
 
 ### 日常更新（代码改动后）
 
