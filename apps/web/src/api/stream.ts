@@ -8,10 +8,11 @@ export interface StreamChatParams {
   onDelta: (text: string) => void;
   onDone: (metadata: Record<string, unknown>) => void;
   onError: (code: string, message: string) => void;
+  onThinking?: (message: string) => void;
 }
 
 interface ServerEvent {
-  type: 'delta' | 'done' | 'error';
+  type: 'delta' | 'done' | 'error' | 'thinking';
   content?: string;
   metadata?: Record<string, unknown>;
   code?: string;
@@ -72,6 +73,9 @@ export async function streamChat(params: StreamChatParams): Promise<void> {
         return;
       }
       switch (parsed.type) {
+        case 'thinking':
+          if (parsed.message) params.onThinking?.(parsed.message);
+          break;
         case 'delta':
           if (parsed.content) params.onDelta(parsed.content);
           break;

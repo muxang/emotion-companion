@@ -97,6 +97,7 @@ export type IntakeResultPublic = Omit<IntakeResult, 'reasoning'>;
 
 export type OrchestratorEvent =
   | { type: 'delta'; content: string }
+  | { type: 'thinking'; message: string }
   | { type: 'meta'; mode: ConversationMode; risk_level: RiskLevel }
   | { type: 'done'; metadata: OrchestratorMeta }
   | { type: 'error'; code: string; message: string };

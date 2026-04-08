@@ -31,6 +31,7 @@ export function ChatPage(): JSX.Element {
   const hydratedSessionId = useChatStore((s) => s.hydratedSessionId);
   const status = useChatStore((s) => s.status);
   const error = useChatStore((s) => s.error);
+  const thinkingMessage = useChatStore((s) => s.thinkingMessage);
   const send = useChatStore((s) => s.send);
   const abort = useChatStore((s) => s.abort);
   const reset = useChatStore((s) => s.reset);
@@ -134,7 +135,7 @@ export function ChatPage(): JSX.Element {
 
   if (authStatus !== 'authed') {
     return (
-      <div className="flex h-screen items-center justify-center text-warm-700/70">
+      <div className="flex h-screen items-center justify-center text-neutral-400">
         <div className="text-center">
           <p className="text-sm">
             {authStatus === 'error' ? `登录失败:${authError}` : '正在登录…'}
@@ -146,11 +147,11 @@ export function ChatPage(): JSX.Element {
 
   const sidebar = (
     <>
-      <div className="flex items-center justify-between border-b border-warm-100 px-4 py-3">
-        <h2 className="text-sm font-medium text-warm-700">我的对话</h2>
+      <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
+        <h2 className="text-sm font-medium text-neutral-800">我的对话</h2>
         <button
           type="button"
-          className="rounded-md bg-warm-500 px-2 py-1 text-xs text-white"
+          className="rounded-md bg-primary-500 px-2 py-1 text-xs text-white hover:bg-primary-600"
           onClick={handleNewSession}
         >
           新建
@@ -166,8 +167,8 @@ export function ChatPage(): JSX.Element {
                 'group flex items-center justify-between gap-2 px-4 py-3 text-sm',
                 isEditing ? '' : 'cursor-pointer',
                 s.id === currentSessionId
-                  ? 'bg-warm-50 text-warm-700'
-                  : 'text-warm-700/70 hover:bg-warm-50',
+                  ? 'bg-primary-100 text-primary-700'
+                  : 'text-neutral-600 hover:bg-primary-50',
               ].join(' ')}
               onClick={() => {
                 if (isEditing) return;
@@ -196,7 +197,7 @@ export function ChatPage(): JSX.Element {
                     }
                   }}
                   onBlur={() => void handleCommitRename(s.id)}
-                  className="flex-1 rounded-md border border-warm-300 bg-white px-2 py-1 text-sm text-warm-700 outline-none focus:border-warm-500"
+                  className="flex-1 rounded-md border border-neutral-200 bg-white px-2 py-1 text-sm text-neutral-800 outline-none focus:border-primary-400"
                   data-testid={`session-rename-input-${s.id}`}
                 />
               ) : (
@@ -205,7 +206,7 @@ export function ChatPage(): JSX.Element {
                 </span>
               )}
               {!isEditing ? (
-                <span className="hidden shrink-0 items-center gap-2 text-xs text-warm-700/40 group-hover:inline-flex">
+                <span className="hidden shrink-0 items-center gap-2 text-xs text-neutral-400 group-hover:inline-flex">
                   <button
                     type="button"
                     aria-label="重命名会话"
@@ -214,7 +215,7 @@ export function ChatPage(): JSX.Element {
                       e.stopPropagation();
                       handleStartRename(s.id, s.title);
                     }}
-                    className="hover:text-warm-700"
+                    className="hover:text-neutral-800"
                   >
                     重命名
                   </button>
@@ -235,7 +236,7 @@ export function ChatPage(): JSX.Element {
           );
         })}
         {sessions.length === 0 ? (
-          <li className="px-4 py-6 text-center text-xs text-warm-700/40">
+          <li className="px-4 py-6 text-center text-xs text-neutral-400">
             还没有对话,点上方"新建"开始
           </li>
         ) : null}
@@ -245,8 +246,8 @@ export function ChatPage(): JSX.Element {
 
   const emptyState = (
     <div className="flex w-full max-w-md flex-col items-center px-6 text-center">
-      <h2 className="text-base font-medium text-warm-700">今天想聊点什么?</h2>
-      <p className="mt-2 text-xs text-warm-700/50">
+      <h2 className="text-base font-medium text-neutral-800">今天想聊点什么?</h2>
+      <p className="mt-2 text-xs text-neutral-400">
         点下面的话题快速开始,也可以直接输入。
       </p>
       <div className="mt-6 flex w-full flex-col gap-2">
@@ -255,7 +256,7 @@ export function ChatPage(): JSX.Element {
             key={topic}
             type="button"
             data-testid="quick-topic"
-            className="rounded-xl border border-warm-100 bg-white px-4 py-3 text-left text-sm text-warm-700 shadow-sm hover:border-warm-500"
+            className="rounded-xl border border-primary-200 bg-white px-4 py-3 text-left text-sm text-primary-600 shadow-sm hover:bg-primary-50"
             onClick={() => handleQuickTopic(topic)}
           >
             {topic}
@@ -266,9 +267,9 @@ export function ChatPage(): JSX.Element {
   );
 
   return (
-    <div className="relative flex h-screen w-full bg-warm-50">
+    <div className="relative flex h-screen w-full bg-neutral-50">
       {/* 桌面端固定侧栏 */}
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-warm-100 bg-white md:flex">
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-neutral-200 bg-neutral-100 md:flex">
         {sidebar}
       </aside>
 
@@ -280,7 +281,7 @@ export function ChatPage(): JSX.Element {
             onClick={() => setSidebarOpen(false)}
             aria-hidden="true"
           />
-          <aside className="absolute left-0 top-0 flex h-full w-64 flex-col border-r border-warm-100 bg-white shadow-xl">
+          <aside className="absolute left-0 top-0 flex h-full w-64 flex-col border-r border-neutral-200 bg-neutral-100 shadow-xl">
             {sidebar}
           </aside>
         </div>
@@ -288,12 +289,12 @@ export function ChatPage(): JSX.Element {
 
       {/* 主区 */}
       <main className="flex flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-warm-100 bg-white px-4 py-3">
+        <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-4 py-3">
           <div className="flex items-center gap-2">
             <button
               type="button"
               aria-label="打开侧栏"
-              className="rounded-md p-1 text-warm-700/70 hover:bg-warm-50 md:hidden"
+              className="rounded-md p-1 text-neutral-400 hover:bg-neutral-100 md:hidden"
               onClick={() => setSidebarOpen(true)}
             >
               <svg
@@ -312,38 +313,38 @@ export function ChatPage(): JSX.Element {
                 <line x1="3" y1="18" x2="21" y2="18" />
               </svg>
             </button>
-            <h1 className="text-sm font-medium text-warm-700">
+            <h1 className="text-sm font-medium text-neutral-800">
               {currentSession ? truncate(currentSession.title, 15) : '情感陪伴'}
             </h1>
           </div>
           <div className="flex items-center gap-3">
             <Link
               to="/analysis"
-              className="text-xs text-warm-700/60 hover:text-warm-700"
+              className="text-xs text-neutral-400 hover:text-primary-600"
             >
               关系分析
             </Link>
             <Link
               to="/recovery"
-              className="text-xs text-warm-700/60 hover:text-warm-700"
+              className="text-xs text-neutral-400 hover:text-primary-600"
             >
               恢复计划
             </Link>
             <Link
               to="/growth"
-              className="text-xs text-warm-700/60 hover:text-warm-700"
+              className="text-xs text-neutral-400 hover:text-primary-600"
             >
               成长
             </Link>
             <Link
               to="/settings"
-              className="text-xs text-warm-700/60 hover:text-warm-700"
+              className="text-xs text-neutral-400 hover:text-primary-600"
             >
               设置
             </Link>
             <button
               type="button"
-              className="text-xs text-warm-700/60 md:hidden"
+              className="text-xs text-neutral-400 md:hidden"
               onClick={handleNewSession}
             >
               + 新对话
@@ -351,7 +352,7 @@ export function ChatPage(): JSX.Element {
           </div>
         </header>
         <div className="flex-1 overflow-y-auto">
-          <MessageList messages={messages} emptyState={emptyState} />
+          <MessageList messages={messages} emptyState={emptyState} thinkingMessage={thinkingMessage} />
         </div>
         {error ? (
           <div className="border-t border-rose-200 bg-rose-50 px-4 py-2 text-xs text-rose-700">
@@ -360,7 +361,7 @@ export function ChatPage(): JSX.Element {
         ) : null}
         {status === 'streaming' ? (
           <div
-            className="border-t border-warm-100 bg-warm-50 px-4 py-1.5 text-center text-xs text-warm-700/60"
+            className="border-t border-neutral-200 bg-neutral-50 px-4 py-1.5 text-center text-xs text-neutral-400"
             data-testid="chat-streaming-hint"
           >
             正在感受你的话,通常需要 5–10 秒…
@@ -370,6 +371,7 @@ export function ChatPage(): JSX.Element {
           value={inputValue}
           onValueChange={setInputValue}
           streaming={status === 'streaming'}
+          thinking={thinkingMessage !== null}
           onSend={(text) => void handleSend(text)}
           onAbort={abort}
         />

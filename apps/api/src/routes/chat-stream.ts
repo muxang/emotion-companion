@@ -53,7 +53,7 @@ function sanitizeString(s: string): string {
 }
 
 export function buildSseChunk(
-  type: 'delta' | 'done' | 'error' | 'meta',
+  type: 'delta' | 'done' | 'error' | 'meta' | 'thinking',
   payload: Record<string, unknown>
 ): string {
   const safe: Record<string, unknown> = { type };
@@ -172,6 +172,9 @@ export async function chatStreamRoutes(app: FastifyInstance): Promise<void> {
         'Access-Control-Allow-Credentials': 'true',
         Vary: 'Origin',
       });
+
+      // 立即推送思考状态，让用户看到 AI 正在处理而非空白等待
+      raw.write(buildSseChunk('thinking', { message: '正在理解你说的话...' }));
 
       const ac = new AbortController();
       let finished = false;

@@ -7,3 +7,25 @@ body,
 #root {
   height: 100%;
 }
+
+/* ThinkingBubble：三点依次亮起动画 */
+@keyframes thinking-dot {
+  0%, 60%, 100% { opacity: 0.2; transform: scale(0.8); }
+  30%            { opacity: 1;   transform: scale(1);   }
+}
+
+/* 滚动条：细条，绿色系 */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: #aee3c0; /* primary-200 */
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: #4db880; /* primary-400 */
+}

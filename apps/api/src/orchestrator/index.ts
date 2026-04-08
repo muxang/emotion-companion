@@ -32,7 +32,7 @@ import {
   makeSafeDefaultTask,
   runRecoveryPlan,
 } from '@emotion/skill-recovery-plan';
-import { collectStream } from '@emotion/core-ai';
+import { collectStream, runFinalResponseGuard } from '@emotion/core-ai';
 import { classifyByKeywords, runFullTriage } from '@emotion/safety';
 import type {
   AnalysisResult,
@@ -190,6 +190,18 @@ export async function* orchestrate(
     keyword_risk: keywordRisk,
     last_assistant_risk: lastAssistantRisk,
   });
+
+  // ---------- 进度提示：intake 完成后根据路由模式告知前端 ----------
+  if (decision.mode !== 'safety' && !deps.signal.aborted) {
+    const THINKING_MESSAGES: Partial<Record<typeof decision.mode, string>> = {
+      companion: '正在组织回复...',
+      analysis: '正在分析关系情况...',
+      coach: '正在准备话术建议...',
+      recovery: '正在查看你的计划...',
+    };
+    const msg = THINKING_MESSAGES[decision.mode];
+    if (msg) yield { type: 'thinking', message: msg };
+  }
 
   // ---------- Step 5: 注入长期记忆 ----------
   // 仅在非 safety 模式 + memory_enabled=true + memory deps 存在时拉记忆
@@ -547,6 +559,16 @@ export async function* orchestrate(
   let finalText = firstText;
 
   if (decision.mode !== 'safety') {
+    // 提前检查：若第一次会失败，提示用户正在优化
+    const preCheck = runFinalResponseGuard({
+      reply: firstText,
+      risk_level: decision.effective_risk,
+      mode: decision.mode,
+    });
+    if (!preCheck.passed && !deps.signal.aborted) {
+      yield { type: 'thinking', message: '正在优化回复...' };
+    }
+
     const guardResult = await runGuardWithRetry({
       firstText,
       risk_level: decision.effective_risk,

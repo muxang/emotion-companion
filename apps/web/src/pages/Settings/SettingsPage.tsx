@@ -51,7 +51,7 @@ export function SettingsPage(): JSX.Element {
 
   if (authStatus !== 'authed') {
     return (
-      <div className="flex h-screen items-center justify-center text-warm-700/70">
+      <div className="flex h-screen items-center justify-center text-neutral-400">
         <p className="text-sm">
           {authStatus === 'error' ? `登录失败：${authError}` : '正在登录…'}
         </p>
@@ -60,23 +60,23 @@ export function SettingsPage(): JSX.Element {
   }
 
   return (
-    <div className="flex min-h-screen w-full flex-col bg-warm-50">
-      <header className="flex items-center justify-between border-b border-warm-100 bg-white px-6 py-3">
-        <h1 className="text-sm font-medium text-warm-700">设置</h1>
-        <nav className="flex gap-4 text-xs text-warm-700/60">
-          <Link to="/chat" className="hover:text-warm-700">
+    <div className="flex min-h-screen w-full flex-col bg-neutral-50">
+      <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-3">
+        <h1 className="text-sm font-medium text-neutral-800">设置</h1>
+        <nav className="flex gap-4 text-xs text-neutral-400">
+          <Link to="/chat" className="hover:text-primary-600">
             对话
           </Link>
-          <Link to="/analysis" className="hover:text-warm-700">
+          <Link to="/analysis" className="hover:text-primary-600">
             分析
           </Link>
-          <Link to="/recovery" className="hover:text-warm-700">
+          <Link to="/recovery" className="hover:text-primary-600">
             恢复
           </Link>
-          <Link to="/growth" className="hover:text-warm-700">
+          <Link to="/growth" className="hover:text-primary-600">
             成长
           </Link>
-          <Link to="/settings" className="text-warm-700">
+          <Link to="/settings" className="text-primary-600">
             设置
           </Link>
         </nav>
@@ -84,7 +84,7 @@ export function SettingsPage(): JSX.Element {
 
       <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-6">
         {status === 'loading' ? (
-          <div className="mb-4 rounded-lg border border-warm-100 bg-white p-4 text-sm text-warm-700/70">
+          <div className="mb-4 rounded-lg border border-neutral-200 bg-white p-4 text-sm text-neutral-400">
             加载中…
           </div>
         ) : null}
@@ -96,11 +96,11 @@ export function SettingsPage(): JSX.Element {
         ) : null}
 
         {/* 记忆开关 */}
-        <section className="mb-4 rounded-lg border border-warm-100 bg-white p-5">
+        <section className="mb-4 rounded-lg border border-neutral-200 bg-white p-5">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <h2 className="text-sm font-medium text-warm-700">长期记忆</h2>
-              <p className="mt-1 text-xs text-warm-700/60">
+              <h2 className="text-sm font-medium text-neutral-800">长期记忆</h2>
+              <p className="mt-1 text-xs text-neutral-400">
                 开启后,系统会记住你提到的关键事件与关系对象,以便后续对话更连贯。
               </p>
             </div>
@@ -113,7 +113,7 @@ export function SettingsPage(): JSX.Element {
               disabled={saving || status === 'loading'}
               className={[
                 'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors',
-                memoryEnabled ? 'bg-warm-500' : 'bg-warm-200',
+                memoryEnabled ? 'bg-primary-500' : 'bg-neutral-200',
                 saving ? 'opacity-60' : '',
               ].join(' ')}
             >
@@ -127,7 +127,7 @@ export function SettingsPage(): JSX.Element {
           </div>
           {!memoryEnabled ? (
             <p
-              className="mt-3 rounded-md bg-warm-50 px-3 py-2 text-xs text-warm-700/70"
+              className="mt-3 rounded-md bg-primary-50 px-3 py-2 text-xs text-neutral-400"
               data-testid="memory-off-hint"
             >
               关闭后新对话不再记录长期记忆
@@ -136,9 +136,9 @@ export function SettingsPage(): JSX.Element {
         </section>
 
         {/* 语气偏好 */}
-        <section className="rounded-lg border border-warm-100 bg-white p-5">
-          <h2 className="text-sm font-medium text-warm-700">回复语气偏好</h2>
-          <p className="mt-1 text-xs text-warm-700/60">
+        <section className="rounded-lg border border-neutral-200 bg-white p-5">
+          <h2 className="text-sm font-medium text-neutral-800">回复语气偏好</h2>
+          <p className="mt-1 text-xs text-neutral-400">
             选择你希望 AI 回复时倾向的语气风格。
           </p>
           <div className="mt-4 grid gap-2 sm:grid-cols-3">
@@ -155,14 +155,14 @@ export function SettingsPage(): JSX.Element {
                   className={[
                     'rounded-lg border px-3 py-3 text-left transition',
                     active
-                      ? 'border-warm-500 bg-warm-50'
-                      : 'border-warm-100 bg-white hover:border-warm-300',
+                      ? 'border-primary-400 bg-primary-50 ring-2 ring-primary-400/30'
+                      : 'border-neutral-200 bg-white hover:border-primary-200 hover:bg-primary-50',
                   ].join(' ')}
                 >
-                  <div className="text-sm font-medium text-warm-700">
+                  <div className="text-sm font-medium text-neutral-800">
                     {opt.title}
                   </div>
-                  <div className="mt-1 text-xs text-warm-700/60">{opt.desc}</div>
+                  <div className="mt-1 text-xs text-neutral-400">{opt.desc}</div>
                 </button>
               );
             })}

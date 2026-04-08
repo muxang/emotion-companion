@@ -20,15 +20,15 @@ function TypingDots(): JSX.Element {
       data-testid="typing-dots"
     >
       <span
-        className="h-1.5 w-1.5 animate-bounce rounded-full bg-warm-700/40"
+        className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary-300"
         style={{ animationDelay: '0ms' }}
       />
       <span
-        className="h-1.5 w-1.5 animate-bounce rounded-full bg-warm-700/40"
+        className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary-300"
         style={{ animationDelay: '150ms' }}
       />
       <span
-        className="h-1.5 w-1.5 animate-bounce rounded-full bg-warm-700/40"
+        className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary-300"
         style={{ animationDelay: '300ms' }}
       />
     </span>
@@ -81,8 +81,8 @@ export function MessageBubble({
         className={[
           'max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm',
           isUser
-            ? 'bg-warm-500 text-white'
-            : 'border border-warm-100 bg-white text-warm-700',
+            ? 'bg-primary-500 text-white'
+            : 'border border-neutral-200 bg-white text-neutral-800',
         ].join(' ')}
       >
         {isUser ? (
@@ -101,7 +101,7 @@ export function MessageBubble({
       {showTimestamp && message.createdAt ? (
         <time
           data-testid="msg-time"
-          className="mt-1 px-1 text-[10px] text-warm-700/40"
+          className="mt-1 px-1 text-[10px] text-neutral-400"
           dateTime={message.createdAt}
         >
           {formatHm(message.createdAt)}

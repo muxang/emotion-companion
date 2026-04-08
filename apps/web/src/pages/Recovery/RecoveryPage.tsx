@@ -83,12 +83,9 @@ export function RecoveryPage(): JSX.Element {
   }, [currentPlan?.id]);
 
   const todayCheckin: RecoveryCheckin | null = useMemo(() => {
-    // 1) 本次会话刚提交过 → 立刻锁住按钮，防止 React 状态延迟引起的重复点击
     if (justSubmittedCheckin) return justSubmittedCheckin;
     if (!currentPlan) return null;
 
-    // 2) 后端打卡成功后会把 current_day 推进一格，所以"刚完成的那一天" = current_day - 1。
-    //    在 checkins 列表里查 day_index === current_day - 1 且 completed=true。
     const justFinishedDayIndex = currentPlan.current_day - 1;
     if (justFinishedDayIndex >= 1) {
       const fromAdvance = checkins.find(
@@ -97,7 +94,6 @@ export function RecoveryPage(): JSX.Element {
       if (fromAdvance) return fromAdvance;
     }
 
-    // 3) 兜底：服务端因故未推进时（极少见），按 current_day 本身查一次。
     return (
       checkins.find(
         (c) => c.day_index === currentPlan.current_day && c.completed
@@ -121,7 +117,6 @@ export function RecoveryPage(): JSX.Element {
   };
 
   const handleSubmitCheckin = async (): Promise<void> => {
-    // 三重防御：1) 已打卡 2) 提交中 3) 没有当前计划
     if (!currentPlan || todayCheckin || submitting) return;
     setSubmitting(true);
     try {
@@ -133,8 +128,6 @@ export function RecoveryPage(): JSX.Element {
         setJustSubmittedCheckin(created);
         setReflection('');
       }
-      // 失败（包括 409）时 store 已自动 fetchDetail 同步状态，
-      // 下一次渲染会通过 todayCheckin 兜底逻辑显示"已完成"。
     } finally {
       setSubmitting(false);
     }
@@ -142,7 +135,7 @@ export function RecoveryPage(): JSX.Element {
 
   if (authStatus !== 'authed') {
     return (
-      <div className="flex h-screen items-center justify-center text-warm-700/70">
+      <div className="flex h-screen items-center justify-center text-neutral-400">
         <p className="text-sm">
           {authStatus === 'error' ? `登录失败：${authError}` : '正在登录…'}
         </p>
@@ -151,23 +144,23 @@ export function RecoveryPage(): JSX.Element {
   }
 
   return (
-    <div className="flex min-h-screen w-full flex-col bg-warm-50">
-      <header className="flex items-center justify-between border-b border-warm-100 bg-white px-6 py-3">
-        <h1 className="text-sm font-medium text-warm-700">恢复计划</h1>
-        <nav className="flex gap-4 text-xs text-warm-700/60">
-          <Link to="/chat" className="hover:text-warm-700">
+    <div className="flex min-h-screen w-full flex-col bg-neutral-50">
+      <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-3">
+        <h1 className="text-sm font-medium text-neutral-800">恢复计划</h1>
+        <nav className="flex gap-4 text-xs text-neutral-400">
+          <Link to="/chat" className="hover:text-primary-600">
             对话
           </Link>
-          <Link to="/analysis" className="hover:text-warm-700">
+          <Link to="/analysis" className="hover:text-primary-600">
             分析
           </Link>
-          <Link to="/recovery" className="text-warm-700">
+          <Link to="/recovery" className="text-primary-600">
             恢复
           </Link>
-          <Link to="/growth" className="hover:text-warm-700">
+          <Link to="/growth" className="hover:text-primary-600">
             成长
           </Link>
-          <Link to="/settings" className="hover:text-warm-700">
+          <Link to="/settings" className="hover:text-primary-600">
             设置
           </Link>
         </nav>
@@ -176,7 +169,7 @@ export function RecoveryPage(): JSX.Element {
       <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-6">
         {status === 'loading' && plans.length === 0 ? (
           <div
-            className="rounded-lg border border-warm-100 bg-white p-5 text-sm text-warm-700/70"
+            className="rounded-lg border border-neutral-200 bg-white p-5 text-sm text-neutral-400"
             data-testid="recovery-loading"
           >
             加载中…
@@ -195,10 +188,10 @@ export function RecoveryPage(): JSX.Element {
         {/* 无 active 计划：展示选项卡片 */}
         {!hasActivePlan && status !== 'loading' ? (
           <section data-testid="recovery-empty">
-            <h2 className="mb-1 text-base font-medium text-warm-700">
+            <h2 className="mb-1 text-base font-medium text-neutral-800">
               开始你的恢复计划
             </h2>
-            <p className="mb-5 text-xs text-warm-700/50">
+            <p className="mb-5 text-xs text-neutral-400">
               选择一个适合你当下状态的计划,陪你一步步走出来。
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -207,17 +200,17 @@ export function RecoveryPage(): JSX.Element {
                   key={opt.type}
                   type="button"
                   data-testid={`plan-option-${opt.type}`}
-                  className="rounded-xl border border-warm-100 bg-white p-5 text-left shadow-sm transition hover:border-warm-500 disabled:opacity-60"
+                  className="rounded-xl border border-neutral-200 bg-white p-5 text-left shadow-sm transition hover:border-primary-400 hover:bg-primary-50 disabled:opacity-60"
                   onClick={() => void handleCreate(opt.type)}
                   disabled={creatingType !== null}
                 >
-                  <h3 className="text-sm font-medium text-warm-700">
+                  <h3 className="text-sm font-medium text-neutral-800">
                     {opt.title}
                   </h3>
-                  <p className="mt-2 text-xs text-warm-700/60">
+                  <p className="mt-2 text-xs text-neutral-600">
                     {opt.description}
                   </p>
-                  <p className="mt-3 text-xs text-warm-700/40">
+                  <p className="mt-3 text-xs text-neutral-400">
                     共 {opt.totalDays} 天 ·
                     {creatingType === opt.type ? ' 创建中…' : ' 点击开始'}
                   </p>
@@ -233,18 +226,18 @@ export function RecoveryPage(): JSX.Element {
             data-testid="recovery-active"
             className="flex flex-col gap-4"
           >
-            <div className="rounded-xl border border-warm-100 bg-white p-5">
+            <div className="rounded-xl border border-neutral-200 bg-white p-5">
               <div className="flex items-center justify-between">
-                <h2 className="text-base font-medium text-warm-700">
+                <h2 className="text-base font-medium text-neutral-800">
                   {planTitle(currentPlan)}
                 </h2>
-                <span className="text-xs text-warm-700/50">
+                <span className="text-xs text-neutral-400">
                   Day {currentPlan.current_day} / {currentPlan.total_days}
                 </span>
               </div>
-              <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-warm-100">
+              <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-neutral-200">
                 <div
-                  className="h-full rounded-full bg-warm-500 transition-all"
+                  className="h-full rounded-full bg-primary-500 transition-all"
                   style={{
                     width: `${Math.min(
                       100,
@@ -260,45 +253,45 @@ export function RecoveryPage(): JSX.Element {
 
             {todayTask ? (
               <div
-                className="rounded-xl border border-warm-100 bg-white p-5"
+                className="rounded-xl border border-primary-200 bg-primary-50 p-5"
                 data-testid="recovery-today-task"
               >
-                <h3 className="mb-2 text-sm font-medium text-warm-700">
+                <h3 className="mb-2 text-sm font-medium text-neutral-800">
                   今日任务
                 </h3>
-                <p className="whitespace-pre-wrap text-sm leading-relaxed text-warm-700">
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-800">
                   {todayTask.task}
                 </p>
-                <div className="mt-4 rounded-lg bg-warm-50 p-3">
-                  <p className="text-xs text-warm-700/60">
+                <div className="mt-4 rounded-lg bg-white/60 p-3">
+                  <p className="text-xs text-neutral-600">
                     思考一下:{todayTask.reflection_prompt}
                   </p>
                 </div>
-                <p className="mt-3 text-xs text-warm-700/50">
+                <p className="mt-3 text-xs text-neutral-400">
                   💛 {todayTask.encouragement}
                 </p>
               </div>
             ) : null}
 
-            <div className="rounded-xl border border-warm-100 bg-white p-5">
-              <h3 className="mb-3 text-sm font-medium text-warm-700">
+            <div className="rounded-xl border border-neutral-200 bg-white p-5">
+              <h3 className="mb-3 text-sm font-medium text-neutral-800">
                 今日打卡
               </h3>
               {todayCheckin ? (
                 <div
-                  className="rounded-lg border border-warm-100 bg-warm-50 p-4 text-sm text-warm-700"
+                  className="rounded-lg border border-primary-200 bg-primary-100 p-4 text-sm text-primary-600"
                   data-testid="recovery-checkin-done"
                 >
                   今日已完成 ✓（心情 {todayCheckin.mood_score ?? '-'} / 10）
                   {todayCheckin.reflection ? (
-                    <p className="mt-2 whitespace-pre-wrap text-xs text-warm-700/70">
+                    <p className="mt-2 whitespace-pre-wrap text-xs text-primary-600/80">
                       {todayCheckin.reflection}
                     </p>
                   ) : null}
                 </div>
               ) : (
                 <div className="flex flex-col gap-3">
-                  <label className="text-xs text-warm-700/70">
+                  <label className="text-xs text-neutral-600">
                     今天的心情:{moodScore} / 10
                     <input
                       type="range"
@@ -307,24 +300,24 @@ export function RecoveryPage(): JSX.Element {
                       step={1}
                       value={moodScore}
                       onChange={(e) => setMoodScore(Number(e.target.value))}
-                      className="mt-2 w-full"
+                      className="mt-2 w-full accent-primary-500"
                       data-testid="recovery-mood-slider"
                     />
                   </label>
-                  <label className="text-xs text-warm-700/70">
+                  <label className="text-xs text-neutral-600">
                     今日反思(可选)
                     <textarea
                       value={reflection}
                       onChange={(e) => setReflection(e.target.value)}
                       rows={3}
                       placeholder="写下今天的感受或一个小发现"
-                      className="mt-2 w-full resize-none rounded-md border border-warm-100 bg-white px-3 py-2 text-sm text-warm-700 focus:border-warm-500 focus:outline-none"
+                      className="mt-2 w-full resize-none rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-800 focus:border-primary-400 focus:outline-none"
                       data-testid="recovery-reflection-input"
                     />
                   </label>
                   <button
                     type="button"
-                    className="self-end rounded-md bg-warm-500 px-4 py-2 text-xs text-white hover:bg-warm-600 disabled:bg-warm-300"
+                    className="self-end rounded-xl bg-primary-500 px-4 py-2 text-xs text-white hover:bg-primary-600 disabled:opacity-40"
                     onClick={() => void handleSubmitCheckin()}
                     disabled={submitting}
                     data-testid="recovery-checkin-submit"
@@ -335,12 +328,12 @@ export function RecoveryPage(): JSX.Element {
               )}
             </div>
 
-            <div className="rounded-xl border border-warm-100 bg-white p-5">
-              <h3 className="mb-3 text-sm font-medium text-warm-700">
+            <div className="rounded-xl border border-neutral-200 bg-white p-5">
+              <h3 className="mb-3 text-sm font-medium text-neutral-800">
                 最近打卡
               </h3>
               {recentCheckins.length === 0 ? (
-                <p className="text-xs text-warm-700/50">
+                <p className="text-xs text-neutral-400">
                   还没有打卡记录,从今天开始吧。
                 </p>
               ) : (
@@ -348,21 +341,21 @@ export function RecoveryPage(): JSX.Element {
                   {recentCheckins.map((c) => (
                     <li
                       key={c.id}
-                      className="rounded-lg border border-warm-100 bg-warm-50 p-3 text-xs text-warm-700"
+                      className="rounded-lg border border-neutral-200 bg-neutral-100 p-3 text-xs text-neutral-800"
                     >
                       <div className="flex items-center justify-between">
                         <span>Day {c.day_index}</span>
-                        <span className="text-warm-700/40">
+                        <span className="text-neutral-400">
                           {formatDateTime(c.created_at)}
                         </span>
                       </div>
                       {c.mood_score != null ? (
-                        <p className="mt-1 text-warm-700/70">
+                        <p className="mt-1 text-neutral-600">
                           心情:{c.mood_score} / 10
                         </p>
                       ) : null}
                       {c.reflection ? (
-                        <p className="mt-1 whitespace-pre-wrap text-warm-700/70">
+                        <p className="mt-1 whitespace-pre-wrap text-neutral-600">
                           {c.reflection}
                         </p>
                       ) : null}

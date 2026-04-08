@@ -89,7 +89,7 @@ export function GrowthPage(): JSX.Element {
 
   if (authStatus !== 'authed') {
     return (
-      <div className="flex h-screen items-center justify-center text-warm-700/70">
+      <div className="flex h-screen items-center justify-center text-neutral-400">
         <p className="text-sm">
           {authStatus === 'error' ? `登录失败：${authError}` : '正在登录…'}
         </p>
@@ -98,23 +98,23 @@ export function GrowthPage(): JSX.Element {
   }
 
   return (
-    <div className="flex min-h-screen w-full flex-col bg-warm-50">
-      <header className="flex items-center justify-between border-b border-warm-100 bg-white px-6 py-3">
-        <h1 className="text-sm font-medium text-warm-700">我的成长记录</h1>
-        <nav className="flex gap-4 text-xs text-warm-700/60">
-          <Link to="/chat" className="hover:text-warm-700">
+    <div className="flex min-h-screen w-full flex-col bg-neutral-50">
+      <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-3">
+        <h1 className="text-sm font-medium text-neutral-800">我的成长记录</h1>
+        <nav className="flex gap-4 text-xs text-neutral-400">
+          <Link to="/chat" className="hover:text-primary-600">
             对话
           </Link>
-          <Link to="/analysis" className="hover:text-warm-700">
+          <Link to="/analysis" className="hover:text-primary-600">
             分析
           </Link>
-          <Link to="/recovery" className="hover:text-warm-700">
+          <Link to="/recovery" className="hover:text-primary-600">
             恢复
           </Link>
-          <Link to="/growth" className="text-warm-700">
+          <Link to="/growth" className="text-primary-600">
             成长
           </Link>
-          <Link to="/settings" className="hover:text-warm-700">
+          <Link to="/settings" className="hover:text-primary-600">
             设置
           </Link>
         </nav>
@@ -123,7 +123,7 @@ export function GrowthPage(): JSX.Element {
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">
         {loading ? (
           <div
-            className="rounded-lg border border-warm-100 bg-white p-5 text-sm text-warm-700/70"
+            className="rounded-lg border border-neutral-200 bg-white p-5 text-sm text-neutral-400"
             data-testid="growth-loading"
           >
             加载中…
@@ -138,7 +138,7 @@ export function GrowthPage(): JSX.Element {
 
         {!loading && !error && feed.events.length === 0 && feed.entities.length === 0 && feed.summaries.length === 0 ? (
           <div
-            className="rounded-lg border border-warm-100 bg-white p-8 text-center text-sm text-warm-700/60"
+            className="rounded-lg border border-neutral-200 bg-white p-8 text-center text-sm text-neutral-400"
             data-testid="growth-empty"
           >
             还没有记录,多聊几次后这里会出现你的成长足迹
@@ -179,17 +179,17 @@ export function GrowthPage(): JSX.Element {
           <div className="w-[20rem] rounded-lg bg-white p-5 shadow-xl">
             <h3
               id="confirm-delete-title"
-              className="mb-2 text-sm font-medium text-warm-700"
+              className="mb-2 text-sm font-medium text-neutral-800"
             >
               确认清除记忆?
             </h3>
-            <p className="mb-4 text-xs text-warm-700/60">
+            <p className="mb-4 text-xs text-neutral-400">
               清除后,系统将不再记得过往对话的关键事件与关系信息。此操作不可恢复。
             </p>
             <div className="flex justify-end gap-2">
               <button
                 type="button"
-                className="rounded-md px-3 py-1.5 text-xs text-warm-700/70 hover:bg-warm-50"
+                className="rounded-md px-3 py-1.5 text-xs text-neutral-600 hover:bg-neutral-100"
                 onClick={() => setConfirmOpen(false)}
                 disabled={deleting}
               >
@@ -197,7 +197,7 @@ export function GrowthPage(): JSX.Element {
               </button>
               <button
                 type="button"
-                className="rounded-md bg-rose-500 px-3 py-1.5 text-xs text-white hover:bg-rose-600 disabled:bg-rose-300"
+                className="rounded-md bg-rose-500 px-3 py-1.5 text-xs text-white hover:bg-rose-600 disabled:opacity-40"
                 onClick={() => void handleConfirmDelete()}
                 disabled={deleting}
               >
@@ -222,17 +222,17 @@ function SummariesSection({
 }): JSX.Element {
   return (
     <section className="mb-6" data-testid="growth-summaries">
-      <h2 className="mb-2 text-xs font-medium text-warm-700/60">最近回顾</h2>
+      <h2 className="mb-2 text-xs font-medium text-neutral-400">最近回顾</h2>
       <ul className="space-y-3">
         {summaries.map((s) => (
           <li
             key={s.id}
-            className="rounded-lg border border-warm-100 bg-white p-4"
+            className="rounded-lg border border-neutral-200 bg-white p-4"
           >
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-warm-700">
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-800">
               {s.summary_text}
             </p>
-            <p className="mt-2 text-xs text-warm-700/40">
+            <p className="mt-2 text-xs text-neutral-400">
               {new Date(s.created_at).toLocaleString('zh-CN', {
                 month: '2-digit',
                 day: '2-digit',
@@ -263,16 +263,16 @@ function EntitiesSection({
 }): JSX.Element {
   return (
     <section className="mb-6" data-testid="growth-entities">
-      <h2 className="mb-2 text-xs font-medium text-warm-700/60">关系对象</h2>
+      <h2 className="mb-2 text-xs font-medium text-neutral-400">关系对象</h2>
       <div className="flex flex-wrap gap-2">
         {entities.map((e) => (
           <span
             key={e.id}
-            className="inline-flex items-center gap-1 rounded-full border border-warm-100 bg-white px-3 py-1 text-xs text-warm-700"
+            className="inline-flex items-center gap-1 rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs text-neutral-800"
           >
             <span className="font-medium">{e.label}</span>
             {e.relation_type ? (
-              <span className="text-warm-700/50">
+              <span className="text-neutral-400">
                 · {RELATION_TYPE_LABEL[e.relation_type] ?? e.relation_type}
               </span>
             ) : null}
@@ -294,27 +294,27 @@ function EventsSection({
 }): JSX.Element {
   return (
     <section className="mb-6" data-testid="growth-timeline">
-      <h2 className="mb-2 text-xs font-medium text-warm-700/60">关键事件</h2>
+      <h2 className="mb-2 text-xs font-medium text-neutral-400">关键事件</h2>
       <ul className="space-y-3">
         {events.map((evt) => (
           <li
             key={evt.id}
-            className="rounded-lg border border-warm-100 bg-white p-4"
+            className="rounded-lg border border-neutral-200 bg-white p-4"
           >
             <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="inline-flex items-center rounded-full bg-warm-100 px-2 py-0.5 text-xs text-warm-700">
+              <span className="inline-flex items-center rounded-full bg-primary-100 px-2 py-0.5 text-xs text-primary-700">
                 {labelOf(evt.event_type)}
               </span>
-              <span className="text-xs text-warm-700/40">
+              <span className="text-xs text-neutral-400">
                 {formatDate(evt.event_time ?? evt.created_at)}
               </span>
             </div>
             {evt.entity_label ? (
-              <p className="mb-1 text-xs text-warm-700/50">
+              <p className="mb-1 text-xs text-neutral-400">
                 关于 {evt.entity_label}
               </p>
             ) : null}
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-warm-700">
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-800">
               {evt.summary}
             </p>
           </li>

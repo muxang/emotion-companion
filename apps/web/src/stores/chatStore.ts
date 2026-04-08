@@ -21,6 +21,11 @@ interface ChatState {
   status: ChatStatus;
   error: string | null;
   abortController: AbortController | null;
+  /**
+   * AI 处理中的进度提示文字（如"正在理解你说的话..."）。
+   * 非 null 时显示思考气泡；收到第一个 delta 后清为 null。
+   */
+  thinkingMessage: string | null;
   reset: (initial?: ChatViewMessage[]) => void;
   /**
    * 把 DB 拉到的 MessageDTO[] 装载为视图消息。
@@ -45,6 +50,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   status: 'idle',
   error: null,
   abortController: null,
+  thinkingMessage: null,
 
   reset(initial = []) {
     set({
@@ -53,6 +59,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       status: 'idle',
       error: null,
       abortController: null,
+      thinkingMessage: null,
     });
   },
 
@@ -97,6 +104,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       messages: [...get().messages, userMsg, assistantMsg],
       status: 'streaming',
       error: null,
+      thinkingMessage: null,
     });
 
     const ac = new AbortController();
@@ -106,8 +114,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       sessionId,
       content,
       signal: ac.signal,
+      onThinking: (message) => {
+        set({ thinkingMessage: message });
+      },
       onDelta: (text) => {
         set({
+          thinkingMessage: null,
           messages: get().messages.map((m) =>
             m.id === assistantId
               ? { ...m, content: m.content + text }
@@ -117,6 +129,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       },
       onDone: () => {
         set({
+          thinkingMessage: null,
           messages: get().messages.map((m) =>
             m.id === assistantId ? { ...m, streaming: false } : m
           ),
@@ -126,6 +139,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       },
       onError: (_code, message) => {
         set({
+          thinkingMessage: null,
           messages: get().messages.map((m) =>
             m.id === assistantId ? { ...m, streaming: false } : m
           ),
@@ -138,6 +152,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     if (ac.signal.aborted) {
       set({
+        thinkingMessage: null,
         messages: get().messages.map((m) =>
           m.id === assistantId ? { ...m, streaming: false } : m
         ),

@@ -1,26 +1,30 @@
 import { useEffect, useRef } from 'react';
 import type { ChatViewMessage } from '../../stores/chatStore.js';
 import { MessageBubble } from './MessageBubble.js';
+import { ThinkingBubble } from './ThinkingBubble.js';
 import { isSameMinute } from '../../utils/time.js';
 
 export interface MessageListProps {
   messages: ChatViewMessage[];
   /** 当消息为空时显示的占位区（由父组件传入空状态/快捷话题） */
   emptyState?: JSX.Element | null;
+  /** AI 处理中的进度提示；非 null 时在消息列表末尾渲染思考气泡 */
+  thinkingMessage?: string | null;
 }
 
 export function MessageList({
   messages,
   emptyState,
+  thinkingMessage,
 }: MessageListProps): JSX.Element {
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     // jsdom 不实现 scrollIntoView，使用可选调用避免测试报错
     bottomRef.current?.scrollIntoView?.({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, thinkingMessage]);
 
-  if (messages.length === 0) {
+  if (messages.length === 0 && !thinkingMessage) {
     return (
       <div className="flex h-full items-center justify-center">
         {emptyState ?? (
@@ -43,6 +47,7 @@ export function MessageList({
           <MessageBubble key={m.id} message={m} showTimestamp={!sameMinute} />
         );
       })}
+      {thinkingMessage ? <ThinkingBubble message={thinkingMessage} /> : null}
       <div ref={bottomRef} />
     </div>
   );
