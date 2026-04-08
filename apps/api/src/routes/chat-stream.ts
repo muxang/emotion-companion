@@ -40,11 +40,27 @@ function makeAutoTitle(text: string): string {
   return cleaned.slice(0, AUTO_TITLE_MAX_CHARS) + '…';
 }
 
+/**
+ * 清除字符串中的 lone surrogate（半个 surrogate pair）。
+ * Node.js 20+ 的 JSON.stringify 对 lone surrogate 会抛 TypeError；
+ * 这里把它替换为空字符串，避免 SSE 流中断。
+ * 正常情况下不应出现（replayChunks 已按码点切），这是最后一道防线。
+ */
+function sanitizeString(s: string): string {
+  // lone high surrogate: \uD800-\uDBFF 不紧跟 low surrogate
+  // lone low surrogate:  \uDC00-\uDFFF 不紧跟 high surrogate
+  return s.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '');
+}
+
 export function buildSseChunk(
   type: 'delta' | 'done' | 'error' | 'meta',
   payload: Record<string, unknown>
 ): string {
-  return `data: ${JSON.stringify({ type, ...payload })}\n\n`;
+  const safe: Record<string, unknown> = { type };
+  for (const [k, v] of Object.entries(payload)) {
+    safe[k] = typeof v === 'string' ? sanitizeString(v) : v;
+  }
+  return `data: ${JSON.stringify(safe)}\n\n`;
 }
 
 /**

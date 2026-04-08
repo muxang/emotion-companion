@@ -10,6 +10,10 @@ server {
     listen [::]:80;
     server_name __API_DOMAIN__;
 
+    # 全局 UTF-8，防止中文/emoji 在文本响应中乱码
+    charset utf-8;
+    charset_types text/plain text/css text/javascript application/javascript application/json text/event-stream;
+
     # 让 certbot 能完成 HTTP-01 challenge
     location /.well-known/acme-challenge/ {
         root /var/www/html;
