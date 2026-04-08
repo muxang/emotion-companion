@@ -17,3 +17,4 @@ process.env.AI_MODEL = 'fake-model';
 process.env.AI_MAX_TOKENS = '256';
 process.env.INTAKE_TIMEOUT_MS = '5000';
 process.env.SKILL_TIMEOUT_MS = '30000';
+process.env.AI_REQUEST_TIMEOUT_MS = '60000';

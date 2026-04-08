@@ -27,7 +27,7 @@ async function bootstrap(): Promise<void> {
     model: env.AI_MODEL,
     defaultMaxTokens: env.AI_MAX_TOKENS,
     maxRetries: 3,
-    requestTimeoutMs: 60_000,
+    requestTimeoutMs: env.AI_REQUEST_TIMEOUT_MS,
     ...(env.ANTHROPIC_BASE_URL ? { baseURL: env.ANTHROPIC_BASE_URL } : {}),
   });
   // 启动时打印一次 AI 端点配置，便于诊断 502 / 凭证问题
@@ -38,7 +38,7 @@ async function bootstrap(): Promise<void> {
       model: env.AI_MODEL,
       baseURL: env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com (default)',
       maxRetries: 3,
-      requestTimeoutMs: 60_000,
+      requestTimeoutMs: env.AI_REQUEST_TIMEOUT_MS,
     })
   );
 

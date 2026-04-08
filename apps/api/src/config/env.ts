@@ -49,6 +49,9 @@ const EnvSchema = z.object({
   /** skill 调用超时（tong-analysis / message-coach / recovery-plan / companion-response）
    *  这些 skill 需要生成结构化 JSON，实际耗时通常 20–40s，默认给 90s 宽裕量。 */
   SKILL_TIMEOUT_MS: z.coerce.number().int().positive().default(90_000),
+  /** SDK 底层 HTTP 超时（必须 >= SKILL_TIMEOUT_MS，否则 SDK 会比软 abort 更早切断）
+   *  默认 120s，覆盖 SDK 内置的 60s 上限。 */
+  AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(120_000),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

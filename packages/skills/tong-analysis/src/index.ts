@@ -49,6 +49,8 @@ export interface TongAnalysisDeps {
   timeoutMs?: number;
   /** 覆盖 max_tokens，分析需要中等长度，默认 1024 */
   maxTokens?: number;
+  /** 可选 logger，用于记录降级原因（AI 超时 vs JSON 解析失败） */
+  logger?: { warn: (obj: Record<string, unknown>, msg: string) => void };
 }
 
 const HIGH_RISK_LEVELS = new Set<RiskLevel>(['high', 'critical']);
@@ -76,14 +78,25 @@ export async function runTongAnalysis(
     raw = await deps.ai.complete({
       system,
       messages: [{ role: 'user', content: user }],
-      maxTokens: deps.maxTokens ?? 1024,
+      maxTokens: deps.maxTokens ?? 2048,
       signal: deps.signal,
       timeoutMs: deps.timeoutMs,
     });
-  } catch {
+  } catch (err) {
     // 网络/超时/AI 错误一律降级，让 orchestrator 用安全文本继续
+    deps.logger?.warn(
+      { err: err instanceof Error ? err.message : String(err), timeoutMs: deps.timeoutMs },
+      '[tong-analysis] AI call failed, degrading to SAFE_DEFAULT'
+    );
     return SAFE_DEFAULT_ANALYSIS;
   }
 
-  return parseTongAnalysisOutput(raw);
+  const result = parseTongAnalysisOutput(raw);
+  if (result === SAFE_DEFAULT_ANALYSIS) {
+    deps.logger?.warn(
+      { rawLength: raw.length, rawPreview: raw.slice(0, 200) },
+      '[tong-analysis] JSON parse failed, degrading to SAFE_DEFAULT'
+    );
+  }
+  return result;
 }
