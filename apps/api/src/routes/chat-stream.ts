@@ -53,7 +53,7 @@ function sanitizeString(s: string): string {
 }
 
 export function buildSseChunk(
-  type: 'delta' | 'done' | 'error' | 'meta' | 'thinking',
+  type: 'delta' | 'done' | 'error' | 'meta' | 'thinking' | 'action',
   payload: Record<string, unknown>
 ): string {
   const safe: Record<string, unknown> = { type };

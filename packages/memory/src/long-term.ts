@@ -165,11 +165,48 @@ export async function getUserMemory(
 }
 
 /**
+ * 智能融合层：渲染 formatMemoryContext 时可附加的实时状态。
+ * 由 orchestrator 在 Step 5 注入，用于让 companion 回复主动感知计划状态。
+ */
+export interface MemoryContextExtras {
+  activePlan?: {
+    plan_type: string;
+    current_day: number;
+    total_days: number;
+  };
+  /** 今日是否已为 active plan 打卡 */
+  checkedInToday?: boolean;
+}
+
+/**
  * 把 UserMemory 渲染为可注入 system prompt 的简短上下文片段。
  * 空记忆返回空字符串。注入风格保持克制，不展示内部 reasoning。
+ *
+ * 第二可选参数 extras：携带 active 计划与打卡状态等实时信息。
  */
-export function formatMemoryContext(memory: UserMemory): string {
+export function formatMemoryContext(
+  memory: UserMemory,
+  extras?: MemoryContextExtras
+): string {
   const parts: string[] = [];
+
+  if (extras?.activePlan) {
+    const p = extras.activePlan;
+    const checkin =
+      extras.checkedInToday === true
+        ? '今日已打卡'
+        : extras.checkedInToday === false
+          ? '今日尚未打卡'
+          : '';
+    const planLabel =
+      p.plan_type === '7day-breakup'
+        ? '7天失恋恢复计划'
+        : p.plan_type === '14day-rumination'
+          ? '14天停止内耗计划'
+          : `${p.plan_type} 计划`;
+    const line = `- 有一个进行中的${planLabel}，今天是第${p.current_day}天（共${p.total_days}天）${checkin ? '；' + checkin : ''}`;
+    parts.push(`【用户当前状态】\n${line}`);
+  }
 
   if (memory.profile) {
     const p = memory.profile;

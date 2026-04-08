@@ -37,11 +37,15 @@ import { classifyByKeywords, runFullTriage } from '@emotion/safety';
 import type {
   AnalysisResult,
   ConversationMode,
+  EmotionState,
   IntakeResult,
   MessageCoachResult,
+  RecoveryPlanDTO,
+  RecoveryPlanType,
   RecoveryTask,
   RiskLevel,
   SafetyResponse,
+  UserIntent,
 } from '@emotion/shared';
 import { decideMode } from './router.js';
 import { placeholderStream } from './placeholder.js';
@@ -51,6 +55,7 @@ import {
   buildAnalysisInputFromIntake,
   formatAnalysisText,
 } from './analysis-input.js';
+import { buildAnalysisInputFromHistory } from './auto-analysis-input.js';
 import {
   buildCoachInputFromIntake,
   formatCoachText,
@@ -191,6 +196,118 @@ export async function* orchestrate(
     last_assistant_risk: lastAssistantRisk,
   });
 
+  // ---------- Step 3.5: 意图融合层 ----------
+  // 在 risk < high 的前提下，根据 intake.intent 微调 decision.mode 或注入副作用。
+  // 副作用类操作（create_plan / checkin）的执行延后到 meta yield 之后，
+  // 并通过 pendingActions 数组顺序 yield。
+  type PendingAction = {
+    action_type:
+      | 'analysis_result'
+      | 'plan_created'
+      | 'checkin_done'
+      | 'plan_options'
+      | 'coach_result';
+    payload: Record<string, unknown>;
+  };
+  const pendingActions: PendingAction[] = [];
+  /** 来自意图层的强制流式文本：非 null 时跳过对应 skill 调用直接回放 */
+  let intentForcedText: string | null = null;
+
+  const isHighOrAbove =
+    decision.effective_risk === 'high' ||
+    decision.effective_risk === 'critical' ||
+    decision.mode === 'safety';
+
+  if (!isHighOrAbove) {
+    const intent = readIntent(intake);
+
+    if (intent === 'request_analysis') {
+      decision = { ...decision, mode: 'analysis', reason: 'intent_request_analysis' };
+    } else if (intent === 'message_coach') {
+      decision = { ...decision, mode: 'coach', reason: 'intent_message_coach' };
+    } else if (intent === 'create_plan') {
+      // 副作用分支：明确类型直接创建；不明确则给 plan_options 引导
+      const planType = detectPlanTypeFromText(input.user_text);
+      if (planType && deps.repos.recovery && deps.user) {
+        try {
+          const created = await deps.repos.recovery.createPlan(
+            deps.user.id,
+            planType
+          );
+          pendingActions.push({
+            action_type: 'plan_created',
+            payload: {
+              plan_id: created.id,
+              plan_type: created.plan_type,
+              total_days: created.total_days,
+              current_day: created.current_day,
+            },
+          });
+          // 路由到 recovery，让现有预运行接管首日任务生成
+          decision = { ...decision, mode: 'recovery', reason: 'intent_create_plan' };
+        } catch (err) {
+          log.warn({ err, requestId }, 'intent_create_plan: createPlan failed');
+        }
+      } else {
+        // 不明确：给两个选项引导，跳过 skill 调用
+        pendingActions.push({
+          action_type: 'plan_options',
+          payload: {
+            options: ['7day-breakup', '14day-rumination'],
+          },
+        });
+        intentForcedText =
+          '你是想走出一段感情，还是停止反复内耗？告诉我你想要哪一个，我们明天就可以一起开始第一天。';
+        decision = { ...decision, mode: 'companion', reason: 'intent_plan_options' };
+      }
+    } else if (intent === 'checkin') {
+      if (deps.repos.recovery && deps.user) {
+        try {
+          const activePlan = await deps.repos.recovery.getActivePlanByUser(
+            deps.user.id
+          );
+          if (activePlan) {
+            const checkins = await deps.repos.recovery.listCheckinsByPlan(
+              activePlan.id
+            );
+            if (!isCheckedInToday(activePlan, checkins)) {
+              const moodScore = inferMoodScore(intake.emotion_state);
+              const result = await deps.repos.recovery.completeCheckin(
+                activePlan.id,
+                deps.user.id,
+                activePlan.current_day,
+                null,
+                moodScore
+              );
+              if (result && !result.already_done) {
+                pendingActions.push({
+                  action_type: 'checkin_done',
+                  payload: {
+                    plan_id: activePlan.id,
+                    day_index: result.checkin.day_index,
+                    mood_score: moodScore,
+                    plan_status: result.plan.status,
+                  },
+                });
+                intentForcedText = `已为你完成第 ${result.checkin.day_index} 天打卡。今天你已经做了一件不容易的事：愿意停下来记录自己。明天我们继续。`;
+                decision = {
+                  ...decision,
+                  mode: 'companion',
+                  reason: 'intent_checkin_done',
+                };
+              }
+            }
+            // 已打过卡或没动作 → 走默认 companion 流程
+          }
+          // 无 active plan → 走默认 companion 流程
+        } catch (err) {
+          log.warn({ err, requestId }, 'intent_checkin failed');
+        }
+      }
+    }
+    // view_timeline / chat：不动 decision，走默认流程
+  }
+
   // ---------- 进度提示：intake 完成后根据路由模式告知前端 ----------
   if (decision.mode !== 'safety' && !deps.signal.aborted) {
     const THINKING_MESSAGES: Partial<Record<typeof decision.mode, string>> = {
@@ -206,7 +323,9 @@ export async function* orchestrate(
   // ---------- Step 5: 注入长期记忆 ----------
   // 仅在非 safety 模式 + memory_enabled=true + memory deps 存在时拉记忆
   // 失败仅记 warn，不阻塞主流程
+  // 智能融合层：同时把 active plan + 当日打卡状态拼进 extras
   let memoryContext = '';
+  let userMemorySnapshot: UserMemory = EMPTY_MEMORY;
   const memoryEnabled = deps.user?.memory_enabled === true;
   if (
     decision.mode !== 'safety' &&
@@ -215,17 +334,54 @@ export async function* orchestrate(
     deps.user
   ) {
     try {
-      const memory: UserMemory = await deps.memory.getUserMemory(
+      userMemorySnapshot = await deps.memory.getUserMemory(
         deps.user.id,
         memoryEnabled
       );
-      memoryContext = deps.memory.formatMemoryContext(memory);
+      // 拼装 extras：active plan + 是否已打卡
+      let extras:
+        | {
+            activePlan?: {
+              plan_type: string;
+              current_day: number;
+              total_days: number;
+            };
+            checkedInToday?: boolean;
+          }
+        | undefined;
+      if (deps.repos.recovery) {
+        try {
+          const activePlan = await deps.repos.recovery.getActivePlanByUser(
+            deps.user.id
+          );
+          if (activePlan) {
+            const checkins = await deps.repos.recovery.listCheckinsByPlan(
+              activePlan.id
+            );
+            extras = {
+              activePlan: {
+                plan_type: activePlan.plan_type,
+                current_day: activePlan.current_day,
+                total_days: activePlan.total_days,
+              },
+              checkedInToday: isCheckedInToday(activePlan, checkins),
+            };
+          }
+        } catch (err) {
+          log.warn({ err, requestId }, 'memory extras (active plan) fetch failed');
+        }
+      }
+      // formatMemoryContext 第二参为可选，旧调用兼容
+      const fmt = deps.memory.formatMemoryContext as unknown as (
+        m: UserMemory,
+        e?: typeof extras
+      ) => string;
+      memoryContext = fmt(userMemorySnapshot, extras);
     } catch (err) {
       log.warn({ err, requestId }, 'memory fetch failed');
       memoryContext = '';
     }
   }
-  void EMPTY_MEMORY;
 
   // ---------- Analysis 预运行 ----------
   // 非流式：先跑一次拿结构化结果，便于：
@@ -239,7 +395,16 @@ export async function* orchestrate(
   let recoveryInitialText: string | null = null;
   if (decision.mode === 'analysis') {
     try {
-      const tongInput = buildAnalysisInputFromIntake(intake, input.user_text);
+      // 智能融合层：request_analysis 意图优先用历史构造输入
+      const useHistory = readIntent(intake) === 'request_analysis';
+      const tongInput = useHistory
+        ? buildAnalysisInputFromHistory(
+            history,
+            userMemorySnapshot,
+            input.user_text,
+            intake
+          )
+        : buildAnalysisInputFromIntake(intake, input.user_text);
       if (memoryContext) tongInput.memory_context = memoryContext;
       const result = await runTongAnalysis(tongInput, {
         ai: deps.ai,
@@ -250,6 +415,11 @@ export async function* orchestrate(
       });
       analysisStructured = result;
       analysisInitialText = formatAnalysisText(result.analysis, result.advice);
+      // 智能融合层：把结构化结果作为 action 事件透传给前端
+      pendingActions.push({
+        action_type: 'analysis_result',
+        payload: result as unknown as Record<string, unknown>,
+      });
     } catch (err) {
       if (err instanceof BlockedByRiskError) {
         // 第二道防线触发：orchestrator 路由层应已拦截，但仍降级到 safety
@@ -288,6 +458,11 @@ export async function* orchestrate(
       });
       coachStructured = result;
       coachInitialText = formatCoachText(result);
+      // 智能融合层：透传话术结构化结果
+      pendingActions.push({
+        action_type: 'coach_result',
+        payload: result as unknown as Record<string, unknown>,
+      });
     } catch (err) {
       if (err instanceof CoachBlockedByRiskError) {
         // 第二道防线触发：路由层应已拦截 high/critical，但仍降级到 safety
@@ -383,6 +558,16 @@ export async function* orchestrate(
 
   // 提前发送 meta 事件（前端可用于状态切换 / 调试）
   yield { type: 'meta', mode: decision.mode, risk_level: decision.effective_risk };
+
+  // 智能融合层：先 yield 已就绪的 action 事件（plan_created / plan_options / checkin_done / analysis_result / coach_result）
+  // 前端不识别可忽略；前端识别则可在流式文本之前先渲染卡片骨架
+  for (const action of pendingActions) {
+    yield {
+      type: 'action',
+      action_type: action.action_type,
+      payload: action.payload,
+    };
+  }
 
   // 写 user message（总是写，决策点 #4）
   // 即使后续 abort 或失败，user 消息也保留在时间线
@@ -511,7 +696,10 @@ export async function* orchestrate(
   }
 
   try {
-    if (decision.mode === 'safety') {
+    if (intentForcedText !== null) {
+      // 智能融合层：plan_options / checkin_done 等分支已有现成文案
+      firstText = intentForcedText;
+    } else if (decision.mode === 'safety') {
       // safety 走规则，不进 guard / retry
       // 优先复用 earlyTriage 的 meta（已包含 AI 二次分类结果），避免重复调用
       let triageMeta: SafetyResponse;
@@ -558,7 +746,7 @@ export async function* orchestrate(
 
   let finalText = firstText;
 
-  if (decision.mode !== 'safety') {
+  if (decision.mode !== 'safety' && intentForcedText === null) {
     // 提前检查：若第一次会失败，提示用户正在优化
     const preCheck = runFinalResponseGuard({
       reply: firstText,
@@ -715,4 +903,75 @@ function stripReasoning(intake: IntakeResult): IntakeResultPublic {
   const { reasoning: _reasoning, ...rest } = intake;
   void _reasoning;
   return rest;
+}
+
+/**
+ * 智能融合层：从 emotion_state 推断打卡心情评分（1-10）。
+ * 用户没有明示评分时使用，避免空值入库。
+ */
+export function inferMoodScore(emotion: EmotionState): number {
+  switch (emotion) {
+    case 'desperate':
+    case 'numb':
+      return 2;
+    case 'sad':
+    case 'anxious':
+    case 'angry':
+      return 4;
+    case 'confused':
+    case 'lonely':
+      return 5;
+    case 'mixed':
+      return 6;
+    default:
+      return 5;
+  }
+}
+
+/**
+ * 智能融合层：从用户原文中识别恢复计划类型。
+ * 命中明确关键词才返回；模糊一律 null（走 plan_options 引导）。
+ */
+export function detectPlanTypeFromText(text: string): RecoveryPlanType | null {
+  const t = text || '';
+  // 7天失恋恢复
+  if (
+    t.includes('7天') ||
+    t.includes('七天') ||
+    t.includes('失恋') ||
+    t.includes('走出') ||
+    t.includes('分手')
+  ) {
+    return '7day-breakup';
+  }
+  // 14天停止内耗
+  if (
+    t.includes('14天') ||
+    t.includes('十四天') ||
+    t.includes('内耗') ||
+    t.includes('反复想') ||
+    t.includes('停止内耗')
+  ) {
+    return '14day-rumination';
+  }
+  return null;
+}
+
+/**
+ * 当日打卡判断：从 checkins 列表里看 plan.current_day 是否已 completed。
+ * 这里的"今天"等同于 plan.current_day，符合现有 recovery repo 的语义
+ * （current_day 表示用户当前在第几天，未打卡时停在该 day_index）。
+ */
+export function isCheckedInToday(
+  plan: RecoveryPlanDTO,
+  checkins: Array<{ day_index: number; completed: boolean }>
+): boolean {
+  return checkins.some(
+    (c) => c.day_index === plan.current_day && c.completed === true
+  );
+}
+
+/** intent 安全读取：缺省视为 chat */
+export function readIntent(intake: IntakeResult): UserIntent {
+  return intake.intent ?? 'chat';
 }

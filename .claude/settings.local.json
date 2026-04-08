@@ -51,7 +51,11 @@
       "Bash(pnpm --filter @emotion/skill-companion-response run test)",
       "Bash(pnpm --filter web run typecheck)",
       "Bash(pnpm --filter @emotion/companion-response run test)",
-      "Bash(pnpm --filter api run typecheck)"
+      "Bash(pnpm --filter api run typecheck)",
+      "Bash(pnpm --filter @emotion/shared run build)",
+      "Bash(pnpm --filter @emotion/skill-emotion-intake run build)",
+      "Bash(pnpm --filter @emotion/memory run build)",
+      "Bash(pnpm --filter api run test -- orchestrator-intent)"
     ]
   }
 }

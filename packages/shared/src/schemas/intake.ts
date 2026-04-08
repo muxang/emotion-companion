@@ -33,6 +33,15 @@ export const ConversationModeSchema = z.enum([
   'safety',
 ]);
 
+export const UserIntentSchema = z.enum([
+  'chat',
+  'request_analysis',
+  'create_plan',
+  'checkin',
+  'view_timeline',
+  'message_coach',
+]);
+
 export const IntakeResultSchema = z.object({
   emotion_state: EmotionStateSchema,
   issue_type: IssueTypeSchema,
@@ -40,6 +49,8 @@ export const IntakeResultSchema = z.object({
   next_mode: ConversationModeSchema,
   confidence: z.number().min(0).max(1),
   reasoning: z.string(),
+  intent: UserIntentSchema.optional(),
+  intent_confidence: z.number().min(0).max(1).optional(),
 });
 
 export type IntakeResultParsed = z.infer<typeof IntakeResultSchema>;

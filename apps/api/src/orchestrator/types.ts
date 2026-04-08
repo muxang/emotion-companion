@@ -95,9 +95,26 @@ export interface OrchestratorMeta {
 /** 给客户端用的 intake 视图：剥离 reasoning（仅用于日志/重试，不外露） */
 export type IntakeResultPublic = Omit<IntakeResult, 'reasoning'>;
 
+/**
+ * 智能融合层 action 事件子类型。
+ * orchestrator 在意图层完成自动操作后向前端透传结构化结果，
+ * 前端据此渲染对应卡片。前端不识别可忽略。
+ */
+export type OrchestratorActionType =
+  | 'analysis_result'
+  | 'plan_created'
+  | 'checkin_done'
+  | 'plan_options'
+  | 'coach_result';
+
 export type OrchestratorEvent =
   | { type: 'delta'; content: string }
   | { type: 'thinking'; message: string }
   | { type: 'meta'; mode: ConversationMode; risk_level: RiskLevel }
+  | {
+      type: 'action';
+      action_type: OrchestratorActionType;
+      payload: Record<string, unknown>;
+    }
   | { type: 'done'; metadata: OrchestratorMeta }
   | { type: 'error'; code: string; message: string };

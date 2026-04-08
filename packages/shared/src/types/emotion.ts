@@ -33,6 +33,18 @@ export type ConversationMode =
   | 'recovery'
   | 'safety';
 
+/**
+ * 用户意图（智能融合层）。orchestrator 据此在对话中直接执行操作，
+ * 用户无需跳转页面。chat 为默认。
+ */
+export type UserIntent =
+  | 'chat'
+  | 'request_analysis'
+  | 'create_plan'
+  | 'checkin'
+  | 'view_timeline'
+  | 'message_coach';
+
 export interface IntakeResult {
   emotion_state: EmotionState;
   issue_type: IssueType;
@@ -41,4 +53,8 @@ export interface IntakeResult {
   confidence: number;
   /** 仅内部使用，禁止返回前端或展示给用户 */
   reasoning: string;
+  /** 智能融合层意图。可选：旧路径无 intent 时按 'chat' 处理 */
+  intent?: UserIntent;
+  /** intent 判断置信度 0-1 */
+  intent_confidence?: number;
 }

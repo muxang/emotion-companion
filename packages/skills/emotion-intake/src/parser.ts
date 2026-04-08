@@ -11,6 +11,8 @@ export const SAFE_DEFAULT_INTAKE: IntakeResult = {
   next_mode: 'companion',
   confidence: 0,
   reasoning: 'parse_failed_safe_default',
+  intent: 'chat',
+  intent_confidence: 0,
 };
 
 /**
