@@ -119,6 +119,7 @@ sudo journalctl -u emotion-api --since yesterday --no-pager > ~/emotion-api-$(da
 scp root@<vps-ip>:~/emotion-api-*.log .
 ```
 
+sudo -u emotion -H bash /home/emotion/emotion/scripts/vps/deploy.sh
 ---
 
 ## 二、服务控制
