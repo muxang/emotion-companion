@@ -4,11 +4,29 @@
 
 ## 🚀 一键部署（推荐）
 
-VPS 全新 Ubuntu 22.04/24.04，全部就绪后执行**一条命令**：
+VPS 全新 **Ubuntu 22.04/24.04**（不支持 OpenCloudOS / CentOS / RHEL）。
+
+### 如果你已经是 root（提示符是 `root@xxx#`）
 
 ```bash
-sudo bash <(curl -fsSL https://raw.githubusercontent.com/muxang/emotion-companion/main/scripts/vps/bootstrap.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/muxang/emotion-companion/main/scripts/vps/bootstrap.sh)
 ```
+
+### 如果你是普通用户（提示符是 `ubuntu@xxx$` / `xxx@xxx$`）
+
+**方法 1：先切 root**
+```bash
+sudo -i
+bash <(curl -fsSL https://raw.githubusercontent.com/muxang/emotion-companion/main/scripts/vps/bootstrap.sh)
+```
+
+**方法 2：两步法（最兼容,不用切 root）**
+```bash
+curl -fsSL https://raw.githubusercontent.com/muxang/emotion-companion/main/scripts/vps/bootstrap.sh -o /tmp/bootstrap.sh
+sudo bash /tmp/bootstrap.sh
+```
+
+> ⚠️ **不要直接用** `sudo bash <(curl ...)` —— sudo 不会继承父 shell 的进程替换 fd,会报 `bash: /dev/fd/63: No such file or directory`。这是 sudo 的安全策略,跟系统无关。
 
 脚本会：
 1. 把已知配置（域名 / 邮箱 / 仓库）打印出来等你确认
@@ -52,10 +70,14 @@ scripts/vps/
 
 ```bash
 # 1. SSH 到 VPS（境外节点,无需备案）
+#    如果还不是 root,先 sudo -i 切到 root
 ssh root@<your-vps-ip>
 
-# 2. 一条命令搞定一切
-sudo bash <(curl -fsSL https://raw.githubusercontent.com/muxang/emotion-companion/main/scripts/vps/bootstrap.sh)
+# 2. 验证是 Ubuntu（不是 OpenCloudOS / CentOS）
+cat /etc/os-release
+
+# 3. 一条命令搞定一切
+bash <(curl -fsSL https://raw.githubusercontent.com/muxang/emotion-companion/main/scripts/vps/bootstrap.sh)
 ```
 
 会看到：

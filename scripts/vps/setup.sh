@@ -40,6 +40,14 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
+# 必须是 Debian/Ubuntu(本脚本用 apt-get / ufw)
+if [[ ! -f /etc/os-release ]] || ! grep -qE "^ID(_LIKE)?=.*\b(ubuntu|debian)\b" /etc/os-release; then
+  DETECTED_OS="$(grep -E '^PRETTY_NAME=' /etc/os-release 2>/dev/null | cut -d= -f2- | tr -d '"' || echo unknown)"
+  err "本脚本只支持 Ubuntu / Debian,但检测到: ${DETECTED_OS}"
+  err "请把 VPS 重装为 Ubuntu 22.04 LTS 后重试"
+  exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATES_DIR="${SCRIPT_DIR}/templates"
 CONFIG_FILE="${SCRIPT_DIR}/config.sh"
@@ -409,13 +417,17 @@ fi
 # ============================================================
 log "Step 9/9: 检查 .env 占位符"
 
+# 只在非注释行（不以 # 开头）且形如 KEY=VALUE 的行里查占位符
+# grep -v '^[[:space:]]*#' 排除注释
 PLACEHOLDERS=()
-if grep -q "__FILL_ME__" "${ENV_FILE}"; then
+NONCOMMENT_HITS="$(grep -v '^[[:space:]]*#' "${ENV_FILE}" | grep '__FILL_ME__' || true)"
+if [[ -n "${NONCOMMENT_HITS}" ]]; then
   while IFS= read -r line; do
+    [[ -z "${line}" ]] && continue
     PLACEHOLDERS+=("${line%%=*}")
-  done < <(grep "__FILL_ME__" "${ENV_FILE}")
+  done <<< "${NONCOMMENT_HITS}"
 fi
-if grep -q "__YOUR_FRONTEND_DOMAIN__" "${ENV_FILE}"; then
+if grep -v '^[[:space:]]*#' "${ENV_FILE}" | grep -q "__YOUR_FRONTEND_DOMAIN__"; then
   PLACEHOLDERS+=("CORS_ORIGIN")
 fi
 

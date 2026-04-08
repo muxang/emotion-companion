@@ -35,7 +35,10 @@
       "Bash(bash -n E:/ai/project/emotion/source/scripts/vps/config.example.sh)",
       "Bash(git:*)",
       "Bash(bash -n E:/ai/project/emotion/source/scripts/vps/config.sh)",
-      "Bash(bash -n E:/ai/project/emotion/source/scripts/vps/bootstrap.sh)"
+      "Bash(bash -n E:/ai/project/emotion/source/scripts/vps/bootstrap.sh)",
+      "Bash(pnpm --filter @emotion/web run build)",
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('E:/ai/project/emotion/source/vercel.json', 'utf8'\\)\\)\")",
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('E:/ai/project/emotion/source/apps/web/vercel.json', 'utf8'\\)\\)\")"
     ]
   }
 }

@@ -67,8 +67,31 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
-if [[ ! -f /etc/os-release ]] || ! grep -q "Ubuntu" /etc/os-release; then
-  warn "未检测到 Ubuntu /etc/os-release，可能不兼容（仅在 Ubuntu 22.04 / 24.04 测过）"
+if [[ ! -f /etc/os-release ]]; then
+  err "未找到 /etc/os-release,无法识别系统"
+  exit 1
+fi
+
+# 必须是 Debian/Ubuntu(用 apt-get)
+if ! grep -qE "^ID(_LIKE)?=.*\b(ubuntu|debian)\b" /etc/os-release; then
+  DETECTED_OS="$(grep -E '^PRETTY_NAME=' /etc/os-release | cut -d= -f2- | tr -d '"')"
+  err "==============================================================="
+  err " 检测到的系统: ${DETECTED_OS}"
+  err " 当前脚本只支持 Ubuntu 22.04 / 24.04 (apt-get + ufw)"
+  err "==============================================================="
+  err ""
+  err " 你的 VPS 看起来是 OpenCloudOS / CentOS / RHEL / Rocky 等 RPM 系发行版,"
+  err " 它们用的是 dnf/yum + firewalld,跟脚本不兼容。"
+  err ""
+  err " 推荐做法: 在腾讯云控制台把这台 VPS 重装为 Ubuntu 22.04 LTS"
+  err "   控制台 → 云服务器 → 实例 → 更多 → 重装系统"
+  err "   公共镜像 → Ubuntu Server 22.04 LTS 64位"
+  err "   IP 不变,大约 5-10 分钟"
+  err ""
+  err " 重装完成后再次执行:"
+  err "   bash <(curl -fsSL https://raw.githubusercontent.com/muxang/emotion-companion/main/scripts/vps/bootstrap.sh)"
+  err "==============================================================="
+  exit 1
 fi
 
 # ============================================================
@@ -291,9 +314,11 @@ if [[ "${SKIP_SECRETS}" == "false" ]]; then
 fi
 
 # 二次校验：还有占位符就拒绝继续
-if grep -qE '__FILL_ME__|__YOUR_FRONTEND_DOMAIN__|__JWT_SECRET_PLACEHOLDER__' "${ENV_FILE}"; then
+# 用 grep -v '^#' 排除注释行,避免模板里说明文字误命中
+PLACEHOLDER_HITS="$(grep -v '^[[:space:]]*#' "${ENV_FILE}" | grep -nE '__FILL_ME__|__YOUR_FRONTEND_DOMAIN__|__JWT_SECRET_PLACEHOLDER__' || true)"
+if [[ -n "${PLACEHOLDER_HITS}" ]]; then
   err ".env 中仍存在占位符,无法启动服务："
-  grep -nE '__FILL_ME__|__YOUR_FRONTEND_DOMAIN__|__JWT_SECRET_PLACEHOLDER__' "${ENV_FILE}" | sed 's/^/    /'
+  echo "${PLACEHOLDER_HITS}" | sed 's/^/    /' >&2
   err "请手动修复后再跑一次 bootstrap.sh"
   exit 1
 fi
