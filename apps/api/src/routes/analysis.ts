@@ -115,6 +115,7 @@ export async function analysisRoutes(app: FastifyInstance): Promise<void> {
         ai: app.aiClient,
         risk_level,
         timeoutMs: env.SKILL_TIMEOUT_MS,
+        logger: request.log,
       });
     } catch (err) {
       if (err instanceof BlockedByRiskError) {

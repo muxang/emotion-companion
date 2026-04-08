@@ -223,6 +223,7 @@ export async function* orchestrate(
         risk_level: decision.effective_risk,
         signal: deps.signal,
         timeoutMs: deps.skillTimeoutMs,
+        logger: deps.logger,
       });
       analysisStructured = result;
       analysisInitialText = formatAnalysisText(result.analysis, result.advice);
@@ -390,6 +391,7 @@ export async function* orchestrate(
         risk_level: decision.effective_risk,
         signal: deps.signal,
         timeoutMs: deps.skillTimeoutMs,
+        logger: deps.logger,
       });
       analysisStructured = result;
       return formatAnalysisText(result.analysis, result.advice);

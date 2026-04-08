@@ -28,8 +28,10 @@ export const AnalysisResultSchema = z.object({
   evidence: z.array(z.string()),
   risks: z.array(z.string()),
   advice: z.string().min(1),
-  confidence: z.number().min(0).max(1),
-  tone: z.enum(['gentle', 'neutral', 'direct']),
+  // confidence 用 coerce 以防 AI 返回字符串 "0.7"
+  confidence: z.coerce.number().min(0).max(1),
+  // tone 容错：AI 偶尔返回中文或非预期值时降级为 neutral，而不是让整个解析失败
+  tone: z.enum(['gentle', 'neutral', 'direct']).catch('neutral'),
 });
 
 /**
