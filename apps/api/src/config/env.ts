@@ -35,13 +35,26 @@ const EnvSchema = z.object({
     .default('true')
     .transform((v) => v === 'true'),
 
-  // ---- Phase 2 ----
-  ANTHROPIC_API_KEY: z.string().min(1, 'ANTHROPIC_API_KEY is required'),
-  /** 可选：自定义 Anthropic API 入口（代理 / 中转 / 私有网关）。留空则用官方 https://api.anthropic.com */
-  ANTHROPIC_BASE_URL: z
+  // ---- AI Provider ----
+  /** 选择 AI 后端：anthropic | openai | deepseek | qwen | zhipu | custom */
+  AI_PROVIDER: z.string().default('anthropic'),
+  /** Anthropic API Key（AI_PROVIDER=anthropic 时必填） */
+  ANTHROPIC_API_KEY: z
     .preprocess(
       (v) => (v === '' ? undefined : v),
-      z.string().url('ANTHROPIC_BASE_URL must be a valid URL').optional()
+      z.string().optional()
+    ),
+  /** OpenAI-compatible API Key（AI_PROVIDER ∈ openai/deepseek/qwen/zhipu/custom 时必填） */
+  OPENAI_API_KEY: z
+    .preprocess(
+      (v) => (v === '' ? undefined : v),
+      z.string().optional()
+    ),
+  /** 覆盖当前 provider 的默认 Base URL（所有 provider 均支持；AI_PROVIDER=custom 时必填） */
+  OPENAI_BASE_URL: z
+    .preprocess(
+      (v) => (v === '' ? undefined : v),
+      z.string().url('OPENAI_BASE_URL must be a valid URL').optional()
     ),
   AI_MODEL: z.string().default('claude-sonnet-4-20250514'),
   AI_MAX_TOKENS: z.coerce.number().int().positive().default(1024),
@@ -52,6 +65,39 @@ const EnvSchema = z.object({
   /** SDK 底层 HTTP 超时（必须 >= SKILL_TIMEOUT_MS，否则 SDK 会比软 abort 更早切断）
    *  默认 120s，覆盖 SDK 内置的 60s 上限。 */
   AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(120_000),
+}).superRefine((data, ctx) => {
+  const provider = data.AI_PROVIDER.toLowerCase();
+  const knownProviders = ['anthropic', 'openai', 'deepseek', 'qwen', 'zhipu', 'custom'];
+  if (!knownProviders.includes(provider)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['AI_PROVIDER'],
+      message: `不支持的 AI_PROVIDER "${data.AI_PROVIDER}"。支持：${knownProviders.join(', ')}`,
+    });
+    return;
+  }
+  if (provider === 'anthropic' && !data.ANTHROPIC_API_KEY) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['ANTHROPIC_API_KEY'],
+      message: 'AI_PROVIDER=anthropic 时 ANTHROPIC_API_KEY 必填',
+    });
+  }
+  const openaiLike = ['openai', 'deepseek', 'qwen', 'zhipu', 'custom'];
+  if (openaiLike.includes(provider) && !data.OPENAI_API_KEY) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['OPENAI_API_KEY'],
+      message: `AI_PROVIDER=${provider} 时 OPENAI_API_KEY 必填`,
+    });
+  }
+  if (provider === 'custom' && !data.OPENAI_BASE_URL) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['OPENAI_BASE_URL'],
+      message: 'AI_PROVIDER=custom 时 OPENAI_BASE_URL 必填',
+    });
+  }
 });
 
 export type Env = z.infer<typeof EnvSchema>;

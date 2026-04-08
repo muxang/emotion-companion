@@ -1,4 +1,4 @@
-import { AIClient } from '@emotion/core-ai';
+import { createAIClient } from '@emotion/core-ai';
 import { createTracker } from '@emotion/analytics';
 import {
   extractAndSaveEntities,
@@ -22,22 +22,22 @@ async function bootstrap(): Promise<void> {
   const env = loadEnv();
   const pool = getPool();
 
-  const aiClient = new AIClient({
-    apiKey: env.ANTHROPIC_API_KEY,
-    model: env.AI_MODEL,
-    defaultMaxTokens: env.AI_MAX_TOKENS,
-    maxRetries: 3,
+  const aiClient = createAIClient({
+    AI_PROVIDER: env.AI_PROVIDER,
+    ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
+    OPENAI_API_KEY: env.OPENAI_API_KEY,
+    OPENAI_BASE_URL: env.OPENAI_BASE_URL,
+    AI_MODEL: env.AI_MODEL,
+    AI_MAX_TOKENS: env.AI_MAX_TOKENS,
     requestTimeoutMs: env.AI_REQUEST_TIMEOUT_MS,
-    ...(env.ANTHROPIC_BASE_URL ? { baseURL: env.ANTHROPIC_BASE_URL } : {}),
   });
   // 启动时打印一次 AI 端点配置，便于诊断 502 / 凭证问题
   // eslint-disable-next-line no-console
   console.info(
     '[ai] client ready',
     JSON.stringify({
-      model: env.AI_MODEL,
-      baseURL: env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com (default)',
-      maxRetries: 3,
+      provider: aiClient.provider,
+      model: aiClient.model,
       requestTimeoutMs: env.AI_REQUEST_TIMEOUT_MS,
     })
   );
