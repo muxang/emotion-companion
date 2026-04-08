@@ -9,14 +9,17 @@ export interface StreamChatParams {
   onDone: (metadata: Record<string, unknown>) => void;
   onError: (code: string, message: string) => void;
   onThinking?: (message: string) => void;
+  onAction?: (actionType: string, payload: unknown) => void;
 }
 
 interface ServerEvent {
-  type: 'delta' | 'done' | 'error' | 'thinking';
+  type: 'delta' | 'done' | 'error' | 'thinking' | 'action';
   content?: string;
   metadata?: Record<string, unknown>;
   code?: string;
   message?: string;
+  action_type?: string;
+  payload?: unknown;
 }
 
 class FatalStreamError extends Error {}
@@ -75,6 +78,11 @@ export async function streamChat(params: StreamChatParams): Promise<void> {
       switch (parsed.type) {
         case 'thinking':
           if (parsed.message) params.onThinking?.(parsed.message);
+          break;
+        case 'action':
+          if (parsed.action_type) {
+            params.onAction?.(parsed.action_type, parsed.payload);
+          }
           break;
         case 'delta':
           if (parsed.content) params.onDelta(parsed.content);

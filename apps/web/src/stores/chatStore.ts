@@ -2,6 +2,20 @@ import { create } from 'zustand';
 import type { MessageDTO } from '@emotion/shared';
 import { streamChat } from '../api/stream.js';
 
+export type ActionCardType =
+  | 'analysis_result'
+  | 'plan_created'
+  | 'checkin_done'
+  | 'plan_options'
+  | 'coach_result';
+
+export interface ActionCard {
+  id: string;
+  action_type: ActionCardType;
+  payload: unknown;
+  createdAt: string;
+}
+
 export interface ChatViewMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -10,6 +24,8 @@ export interface ChatViewMessage {
   createdAt: string;
   /** 流式中标记，true 时显示打字光标 */
   streaming?: boolean;
+  /** 智能融合：附加在该消息下方的富文本卡片（分析结果、计划确认等） */
+  actionCard?: ActionCard;
 }
 
 type ChatStatus = 'idle' | 'streaming' | 'error';
@@ -116,6 +132,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
       signal: ac.signal,
       onThinking: (message) => {
         set({ thinkingMessage: message });
+      },
+      onAction: (actionType, payload) => {
+        const card: ActionCard = {
+          id: nextId(),
+          action_type: actionType as ActionCardType,
+          payload,
+          createdAt: new Date().toISOString(),
+        };
+        set({
+          messages: get().messages.map((m) =>
+            m.id === assistantId ? { ...m, actionCard: card } : m
+          ),
+        });
       },
       onDelta: (text) => {
         set({
