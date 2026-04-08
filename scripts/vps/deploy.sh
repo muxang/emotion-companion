@@ -68,12 +68,13 @@ fi
 log "Step 2/5: pnpm install --frozen-lockfile"
 pnpm install --frozen-lockfile
 
-# ---------- Step 3: build ----------
-log "Step 3/5: build apps/api"
-pnpm --filter @emotion/api run build
-
-if [[ ! -f "${APP_DIR}/apps/api/dist/index.js" ]]; then
-  err "构建产物不存在，构建失败"
+# ---------- Step 3: typecheck (生产用 tsx 直接跑 .ts,无需单独 build) ----------
+log "Step 3/5: typecheck"
+if pnpm --filter @emotion/api run typecheck >/dev/null 2>&1; then
+  ok "  typecheck 通过"
+else
+  err "  typecheck 有报错,先在本地修好再 push"
+  pnpm --filter @emotion/api run typecheck || true
   exit 1
 fi
 

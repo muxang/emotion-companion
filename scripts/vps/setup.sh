@@ -229,31 +229,44 @@ else
 fi
 
 # ============================================================
-# Step 4: 安装依赖 + 构建（如果 node_modules 与 dist 已存在则跳过）
+# Step 4: 安装依赖 + typecheck（生产用 tsx 加载 .ts,不需要单独 build）
 # ============================================================
-# 重跑 setup.sh 时（例如只想修 nginx 配置），不应该重新 pnpm install + build。
-# 增量更新走 deploy.sh，那里会强制 git pull + install + build。
+# 不再编译 dist:
+#   workspace 内 packages/* 的 main 字段都指向 src/*.ts,
+#   单独编译 apps/api 后 Node 在运行时仍会去 import .ts 文件,会报
+#   ERR_UNKNOWN_FILE_EXTENSION。生产环境改用 tsx 作 ESM loader 直接加载 .ts。
+#
+# 这里只跑一次 typecheck 提前发现错误,不生成 dist。
 # ============================================================
-log "Step 4/9: 依赖与构建"
+log "Step 4/9: 依赖安装 + typecheck"
 
 NEED_INSTALL=true
-if [[ -d "${APP_DIR}/node_modules" && -f "${APP_DIR}/apps/api/dist/index.js" ]]; then
-  ok "  node_modules + apps/api/dist 已存在，跳过 install/build"
-  ok "  （要强制重建请跑：bash ${SCRIPT_DIR}/deploy.sh）"
+if [[ -d "${APP_DIR}/node_modules/.pnpm" ]]; then
+  ok "  node_modules 已存在,跳过 install"
+  ok "  （要强制重装请跑：bash ${SCRIPT_DIR}/deploy.sh）"
   NEED_INSTALL=false
 fi
 
 if [[ "${NEED_INSTALL}" == "true" ]]; then
   log "  pnpm install --frozen-lockfile"
   sudo -u "${APP_USER}" -H bash -lc "cd '${APP_DIR}' && pnpm install --frozen-lockfile"
-  log "  pnpm --filter @emotion/api run build"
-  sudo -u "${APP_USER}" -H bash -lc "cd '${APP_DIR}' && pnpm --filter @emotion/api run build"
+fi
 
-  if [[ ! -f "${APP_DIR}/apps/api/dist/index.js" ]]; then
-    err "构建产物 ${APP_DIR}/apps/api/dist/index.js 不存在，构建可能失败"
-    exit 1
-  fi
-  ok "  构建完成"
+# 验证 tsx 已就位（systemd 用 --import tsx 启动需要它）
+if [[ ! -d "${APP_DIR}/apps/api/node_modules/tsx" && \
+      ! -L "${APP_DIR}/apps/api/node_modules/tsx" ]]; then
+  err "tsx 未在 apps/api/node_modules 中找到"
+  err "请检查 apps/api/package.json 的 dependencies 是否包含 tsx"
+  exit 1
+fi
+ok "  tsx 就位"
+
+# 跑一次 typecheck（不生成 dist,仅提前发现 TypeScript 错误）
+log "  pnpm --filter @emotion/api run typecheck"
+if sudo -u "${APP_USER}" -H bash -lc "cd '${APP_DIR}' && pnpm --filter @emotion/api run typecheck" >/dev/null 2>&1; then
+  ok "  typecheck 通过"
+else
+  warn "  typecheck 有报错（部署不会因此停止,但建议本地修一下）"
 fi
 
 # ============================================================

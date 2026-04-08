@@ -5,9 +5,15 @@ After=network.target
 [Service]
 Type=simple
 User=__APP_USER__
-WorkingDirectory=__APP_DIR__
-# 用 Node 自带的 --env-file 读取 apps/api/.env（Node 20.6+）
-ExecStart=/usr/bin/node --env-file=__APP_DIR__/apps/api/.env __APP_DIR__/apps/api/dist/index.js
+# WorkingDirectory 必须是 apps/api,这样 Node 解析 `--import tsx` 时
+# 能从 apps/api/node_modules 找到 tsx 包
+WorkingDirectory=__APP_DIR__/apps/api
+# 用 tsx 在生产环境直接加载 .ts 源码
+# 原因: workspace 内 packages/* 的 main 字段都指向 src/*.ts,
+# 单独编译 apps/api 后,运行时 Node 仍会去解析 .ts 文件,会崩
+# 用 tsx 作 ESM loader 让 Node 能加载 .ts(Node 20.6+ 的 --import 语法)
+# --env-file 读取 .env(Node 20.6+)
+ExecStart=/usr/bin/node --import tsx --env-file=__APP_DIR__/apps/api/.env __APP_DIR__/apps/api/src/index.ts
 Restart=on-failure
 RestartSec=3
 # 防止上游抖动时一秒内重启过多次
