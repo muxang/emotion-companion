@@ -53,8 +53,10 @@ export interface OrchestratorDeps {
     warn: (obj: Record<string, unknown>, msg?: string) => void;
     error: (obj: Record<string, unknown>, msg?: string) => void;
   };
-  /** 软超时配置 */
+  /** emotion-intake / safety triage 的软超时（快速分类，10s 足够） */
   intakeTimeoutMs: number;
+  /** 实际 skill 调用超时（tong-analysis / companion / coach / recovery，默认 90s） */
+  skillTimeoutMs: number;
   /** 注入便于测试的 requestId（默认 randomUUID） */
   requestId?: string;
   /**

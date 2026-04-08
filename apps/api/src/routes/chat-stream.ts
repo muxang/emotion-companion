@@ -203,6 +203,7 @@ export async function chatStreamRoutes(app: FastifyInstance): Promise<void> {
             signal: ac.signal,
             logger: request.log,
             intakeTimeoutMs: env.INTAKE_TIMEOUT_MS,
+            skillTimeoutMs: env.SKILL_TIMEOUT_MS,
             requestId,
             ...(userRecord
               ? {

@@ -16,3 +16,4 @@ process.env.ANTHROPIC_API_KEY = 'test-anthropic-key';
 process.env.AI_MODEL = 'fake-model';
 process.env.AI_MAX_TOKENS = '256';
 process.env.INTAKE_TIMEOUT_MS = '5000';
+process.env.SKILL_TIMEOUT_MS = '30000';

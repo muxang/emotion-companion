@@ -200,6 +200,17 @@ else
   adduser --disabled-password --gecos "" "${APP_USER}"
 fi
 
+# 给 APP_USER 配置免密 sudo，仅限 deploy.sh 需要的 systemctl 命令
+SUDOERS_FILE="/etc/sudoers.d/${APP_USER}-deploy"
+SUDOERS_CONTENT="${APP_USER} ALL=(ALL) NOPASSWD: /bin/systemctl restart ${SERVICE_NAME}, /bin/systemctl status ${SERVICE_NAME}"
+if [[ ! -f "${SUDOERS_FILE}" ]] || ! grep -qF "${SERVICE_NAME}" "${SUDOERS_FILE}"; then
+  echo "${SUDOERS_CONTENT}" > "${SUDOERS_FILE}"
+  chmod 440 "${SUDOERS_FILE}"
+  ok "  sudoers 已配置（${APP_USER} 可免密 restart/status ${SERVICE_NAME}）"
+else
+  ok "  sudoers 已是最新"
+fi
+
 # 让 APP_USER 也能用 corepack/pnpm（corepack 的 shim 在 /usr/bin 已经全局可用，
 # 但 PNPM_HOME 需要在用户自己的 shell rc 里设一下，避免 build 时找不到 store）
 USER_HOME="/home/${APP_USER}"

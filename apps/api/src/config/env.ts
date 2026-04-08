@@ -46,6 +46,9 @@ const EnvSchema = z.object({
   AI_MODEL: z.string().default('claude-sonnet-4-20250514'),
   AI_MAX_TOKENS: z.coerce.number().int().positive().default(1024),
   INTAKE_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
+  /** skill 调用超时（tong-analysis / message-coach / recovery-plan / companion-response）
+   *  这些 skill 需要生成结构化 JSON，实际耗时通常 20–40s，默认给 90s 宽裕量。 */
+  SKILL_TIMEOUT_MS: z.coerce.number().int().positive().default(90_000),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

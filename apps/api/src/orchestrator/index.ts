@@ -222,7 +222,7 @@ export async function* orchestrate(
         ai: deps.ai,
         risk_level: decision.effective_risk,
         signal: deps.signal,
-        timeoutMs: deps.intakeTimeoutMs,
+        timeoutMs: deps.skillTimeoutMs,
       });
       analysisStructured = result;
       analysisInitialText = formatAnalysisText(result.analysis, result.advice);
@@ -260,7 +260,7 @@ export async function* orchestrate(
         ai: deps.ai,
         risk_level: decision.effective_risk,
         signal: deps.signal,
-        timeoutMs: deps.intakeTimeoutMs,
+        timeoutMs: deps.skillTimeoutMs,
       });
       coachStructured = result;
       coachInitialText = formatCoachText(result);
@@ -311,7 +311,7 @@ export async function* orchestrate(
               ai: deps.ai,
               risk_level: decision.effective_risk,
               signal: deps.signal,
-              timeoutMs: deps.intakeTimeoutMs,
+              timeoutMs: deps.skillTimeoutMs,
             }
           );
           recoveryStructured = task;
@@ -389,7 +389,7 @@ export async function* orchestrate(
         ai: deps.ai,
         risk_level: decision.effective_risk,
         signal: deps.signal,
-        timeoutMs: deps.intakeTimeoutMs,
+        timeoutMs: deps.skillTimeoutMs,
       });
       analysisStructured = result;
       return formatAnalysisText(result.analysis, result.advice);
@@ -420,7 +420,7 @@ export async function* orchestrate(
           ai: deps.ai,
           risk_level: decision.effective_risk,
           signal: deps.signal,
-          timeoutMs: deps.intakeTimeoutMs,
+          timeoutMs: deps.skillTimeoutMs,
         }
       );
       recoveryStructured = task;
@@ -441,7 +441,7 @@ export async function* orchestrate(
         ai: deps.ai,
         risk_level: decision.effective_risk,
         signal: deps.signal,
-        timeoutMs: deps.intakeTimeoutMs,
+        timeoutMs: deps.skillTimeoutMs,
       });
       coachStructured = result;
       return formatCoachText(result);
