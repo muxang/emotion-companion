@@ -663,6 +663,74 @@ logs-api | grep "rate limit\|429"
 #    然后 SSL/TLS 改 Full (strict),Cache Level 改 Bypass
 ```
 
+### 场景 H：日志看到「[tong-analysis] JSON parse failed, degrading to SAFE_DEFAULT」
+
+```bash
+logs-api | grep "tong-analysis"
+```
+
+含义与排查步骤：
+
+- **rawLength 很小（< 500）+ rawPreview 文末是中文且显然没说完** → 模型 `finish_reason=length` 截断了。
+  parser 已经有 `extractAnalysisFromTruncated` 抢救路径，会拿到一个 `confidence: 0.3` 的部分结果而非完全空白。
+  如果用户反馈仍然完全没拿到内容，确认：
+  1. `apps/api/src/orchestrator/index.ts` 调用 `runTongAnalysis` 没传死的 `maxTokens`（默认 4096，覆盖了 env 的 1024）
+  2. 实际跑的 provider 没设服务端硬上限（DeepSeek / 通义都允许 4096）
+  3. 是否值得把默认再调高到 6144 / 8192
+
+- **rawLength 接近上限 + 整段是模型自说自话的文字而非 JSON** → prompt 没让模型听话。检查 `packages/skills/tong-analysis/src/prompt.ts` 是不是被改坏了，`buildTongAnalysisPrompt` 末尾是否还有「请严格输出 JSON」。
+
+- **rawLength 是 0 / 极小** → AI provider 网络异常，应该已经先抛 `AI_REQUEST_FAILED`，去 grep 那个错误码。
+
+### 场景 I：用户截图里出现 ◆◆◆ 乱码
+
+`◆` 是字体渲染不出某个字符的兜底。**根因几乎一定在数据源头，不在传输**：
+
+```bash
+logs-api | grep -i "delta"
+# 流式 delta 事件如果服务端日志里就是干净文字，问题在前端字体；
+# 如果服务端日志里就是 ◆ 或 \uFFFD，问题在 AI 输出 / sanitizeText
+```
+
+- **新生成的消息有乱码** → 多半是 AI 输出了 emoji / 装饰符号。
+  根治办法是在 prompt 层禁。已有的硬约束在：
+  - `packages/skills/companion-response/src/prompt.ts`「【硬性输出约束】」段
+  - `packages/skills/message-coach/src/prompt.ts` 铁律第 8 条
+  如果新加了 skill，**记得把同样的约束加上**。
+  
+- **历史消息有乱码** → 旧 DB 数据已经写脏了。`sanitizeText` 只过滤 `U+FFFD` 与不可见控制字符，对已经存进来的字符不会回溯清洗。如有必要写一次性 SQL 修旧数据。
+
+- **`apps/api/src/orchestrator/replay.ts` 的 `sanitizeText` 千万别加 emoji 范围正则**。历史教训：之前用 `[\u{1F300}-\u{1F9FF}]/gu` 误伤了相邻汉字，出现「所◆◆我就来了」式截断。emoji 一律放行，前端 Noto Sans SC 能渲染。
+
+### 场景 J：刷新页面后历史会话里的富文本卡片消失
+
+正常情况下不应该发生。卡片数据存在 `messages.structured_json._actionCard` 里，前端 `chatStore.hydrateFromDb` 加载时重建。排查：
+
+```bash
+sudo -u emotion psql "$(grep ^DATABASE_URL= ~/emotion/apps/api/.env | cut -d= -f2-)"
+# 然后:
+SELECT id, role, content, structured_json->'_actionCard' AS card
+FROM messages
+WHERE session_id = '<session-uuid>'
+ORDER BY created_at ASC;
+```
+
+- `card` 全为 NULL → orchestrator 写入路径出问题，看 `apps/api/src/orchestrator/index.ts` 中 `pendingActions[0]` 包装 `_actionCard` 的那段
+- `card` 有数据但前端不渲染 → 看 `apps/web/src/stores/chatStore.ts` 的 `hydrateFromDb` 是否在解析 `structured_json._actionCard`
+- 仅 `plan_options` 卡片显示按钮不消失 → `isLastMessage` 标记没正确写入；hydrate 时按 `i === lastIndex` 才置 true
+
+### 场景 K：分析 / 话术消息出现重复（卡片 + 上方一段同内容文字）
+
+`analysis` / `coach` 模式应该走 `skipTextReplay = true` 路径，只渲染卡片不回放文字。如果用户截图里看到了一段重复的文字气泡，说明：
+
+```bash
+logs-api | grep "skipTextReplay\|analysis_result\|coach_result"
+```
+
+- 检查 `orchestrator/index.ts` 在 push `analysis_result` / `coach_result` 到 `pendingActions` 之后是否设置了 `skipTextReplay = true`
+- 检查 Step 12 的 `if (!skipTextReplay)` 包裹是否还在
+- DB 里 `messages.content` 应该是占位符 `[关系分析结果见上方卡片]` / `[话术建议见上方卡片]`，如果是完整正文，说明持久化分支也漏了 `skipTextReplay` 判断
+
 ---
 
 ## 十一、应急回滚
@@ -744,4 +812,5 @@ sudo nginx -t && sudo systemctl reload nginx
 | 日期 | 改动 |
 |---|---|
 | 2026-04-08 | 初版 |
+| 2026-04-09 | 新增故障 playbook 场景 H/I/J/K：tong-analysis JSON parse 降级、◆ 乱码定位、ActionCard 持久化排查、analysis/coach 文字重复排查 |
 | 2026-04-08 | 多 Provider 支持：AI_PROVIDER / OPENAI_API_KEY / OPENAI_BASE_URL；更新 AI 相关排查步骤 |

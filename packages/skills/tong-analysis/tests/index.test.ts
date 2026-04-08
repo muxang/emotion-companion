@@ -128,6 +128,28 @@ describe('tong-analysis: 解析失败安全降级', () => {
     const out = parseTongAnalysisOutput('');
     expect(out).toEqual(SAFE_DEFAULT_ANALYSIS);
   });
+
+  it('JSON 被截断在 analysis 字段中段时，返回降级的部分结果而非 SAFE_DEFAULT', () => {
+    // 模拟模型 finish_reason=length：analysis 写到一半就停了，
+    // 既无收口引号也无收口大括号
+    const truncated =
+      '{"analysis":"目前你只提供了一个主观感受——「忽冷忽热」，但缺乏具体行为细节，所以很难给出可靠判断。继续观察对方';
+    const out = parseTongAnalysisOutput(truncated);
+    expect(out).not.toEqual(SAFE_DEFAULT_ANALYSIS);
+    expect(out.analysis).toContain('忽冷忽热');
+    expect(out.analysis).toContain('继续观察对方');
+    expect(out.confidence).toBe(0.3);
+    expect(out.tone).toBe('neutral');
+    expect(out.evidence).toEqual([]);
+    expect(out.risks).toEqual([]);
+    expect(out.advice.length).toBeGreaterThan(0);
+  });
+
+  it('截断 JSON 中 analysis 为空字符串时，仍走 SAFE_DEFAULT', () => {
+    const truncated = '{"analysis":"';
+    const out = parseTongAnalysisOutput(truncated);
+    expect(out).toEqual(SAFE_DEFAULT_ANALYSIS);
+  });
 });
 
 describe('tong-analysis: runTongAnalysis 集成', () => {

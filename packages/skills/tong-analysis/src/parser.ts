@@ -100,16 +100,83 @@ function repairUnescapedQuotes(s: string): string {
 }
 
 /**
+ * 从被截断的 JSON 串中尽力抠出 "analysis":"..." 字段的文本值。
+ *
+ * 适用场景：模型只写到一半就停了（finish_reason: length / stop），
+ * JSON 既无收口大括号也无收口引号，但 analysis 字段已有大段有效正文。
+ * 与其整段丢弃，不如把这段正文作为降级结果还给用户。
+ *
+ * 算法：定位 "analysis" 键 → 跳过冒号空白 → 进入字符串值 →
+ * 状态机走到首个未转义的 " 或字符串末尾为止。
+ */
+function extractAnalysisFromTruncated(s: string): string | null {
+  const keyIdx = s.indexOf('"analysis"');
+  if (keyIdx < 0) return null;
+  const colon = s.indexOf(':', keyIdx + '"analysis"'.length);
+  if (colon < 0) return null;
+  let i = colon + 1;
+  while (i < s.length && ' \t\n\r'.includes(s[i] ?? '')) i++;
+  if (s[i] !== '"') return null;
+  i++; // 跳过开口引号
+  const valStart = i;
+  while (i < s.length) {
+    const ch = s[i];
+    if (ch === '\\') {
+      i += 2;
+      continue;
+    }
+    if (ch === '"') break;
+    i++;
+  }
+  const raw = s.slice(valStart, i);
+  // 反转义常见序列；其它转义保持原样
+  const text = raw
+    .replace(/\\"/g, '"')
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\t/g, '\t')
+    .replace(/\\\\/g, '\\')
+    .trim();
+  return text.length > 0 ? text : null;
+}
+
+/**
+ * 截断输出的兜底结果：保留模型已经写出的 analysis 文本，
+ * 其它字段填克制的占位，confidence=0.3 标识"降级但有信息"，
+ * 区别于 SAFE_DEFAULT 的"完全没拿到信息"。
+ */
+function buildPartialFromAnalysisText(text: string): AnalysisResult {
+  return {
+    analysis: text,
+    evidence: [],
+    risks: [],
+    advice:
+      '基于现有信息只能给到这个程度的判断。可以把最近一次让你最在意的具体场景再补一些细节（对方的原话、时间点、你的第一反应），我们一起继续看。',
+    confidence: 0.3,
+    tone: 'neutral',
+  };
+}
+
+/**
  * 解析 LLM 原始输出为 AnalysisResult。
- * 任何失败一律返回 SAFE_DEFAULT_ANALYSIS，永不抛错。
+ * 任何失败一律返回 SAFE_DEFAULT_ANALYSIS（或截断兜底），永不抛错。
  * 解析流程：
  *  1. extractJson 提取 JSON 字符串
  *  2. JSON.parse 直接解析
  *  3. 若失败，尝试 repairUnescapedQuotes 后再解析（处理 AI 内部引号未转义的情况）
+ *  4. 仍失败：尝试从截断 JSON 中抠出 analysis 文本，构造降级结果
  */
 export function parseTongAnalysisOutput(raw: string): AnalysisResult {
-  const jsonStr = extractJson(raw);
-  if (!jsonStr) return SAFE_DEFAULT_ANALYSIS;
+  // 截断的 JSON 没有收口大括号，extractJson 会返回 null。
+  // 这种情况下退而求其次：从首个 { 起的所有内容作为待解析串，
+  // 让下游的 repairUnescapedQuotes / extractAnalysisFromTruncated 兜底。
+  let jsonStr = extractJson(raw);
+  if (!jsonStr) {
+    const trimmed = raw.trim();
+    const firstBrace = trimmed.indexOf('{');
+    if (firstBrace < 0) return SAFE_DEFAULT_ANALYSIS;
+    jsonStr = trimmed.slice(firstBrace);
+  }
 
   let json: unknown;
 
@@ -121,6 +188,11 @@ export function parseTongAnalysisOutput(raw: string): AnalysisResult {
     try {
       json = JSON.parse(repairUnescapedQuotes(jsonStr));
     } catch {
+      // 第三次尝试：JSON 被截断时，至少把 analysis 字段抠出来给用户
+      const partialText = extractAnalysisFromTruncated(jsonStr);
+      if (partialText) {
+        return buildPartialFromAnalysisText(partialText);
+      }
       return SAFE_DEFAULT_ANALYSIS;
     }
   }

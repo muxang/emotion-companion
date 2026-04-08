@@ -35,6 +35,7 @@ export function ActionCardRenderer({
       return (
         <PlanOptionsCard
           onSelect={(message) => onPlanOptionSelect?.(message)}
+          isLastMessage={card.isLastMessage}
         />
       );
     case 'checkin_done':

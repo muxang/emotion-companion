@@ -379,6 +379,10 @@ CREATE TABLE messages (
 **关键约束**：
 - `intake_result` 写入前 orchestrator 会**剥离 `reasoning` 字段**（CLAUDE.md §13.2 要求）
 - abort 情况下只写 user 消息，**不写 assistant 消息**（保持用户时间线真实）
+- `structured_json` 的两类内容：
+  1. **Skill 原始结构化输出**（`AnalysisResult` / `MessageCoachResult` / `RecoveryTask`）— 给后续审计与未来扩展用
+  2. **`_actionCard: { action_type, payload }`** — 智能融合层富文本卡片快照，前端 `chatStore.hydrateFromDb` 会从这里重建 `ActionCard`，**保证刷新页面后历史卡片不丢失**
+- `analysis` / `coach` 模式下 `content` 字段写占位符（`[关系分析结果见上方卡片]` / `[话术建议见上方卡片]`）而非完整正文，因为前端只渲染卡片，文字回放被跳过——避免一份内容渲染两次
 
 ### user_profiles（Phase 5）
 
@@ -560,7 +564,7 @@ CREATE INDEX idx_analytics_events_name_created ON analytics_events(event_name, c
 |---|---|
 | `authStore` | `bootstrap()` 自动登录、`reauth()` 401 fallback、`logout()` |
 | `sessionStore` | `fetchSessions` / `selectSession` / `newSession` / `removeSession` / `renameSession`（乐观更新 + 失败回滚）|
-| `chatStore` | `messages` / `streaming` 状态 / `send()` / `abort()` / **`hydrateFromDb(sessionId, dtos)`**（跨页面切换不丢历史）|
+| `chatStore` | `messages` / `streaming` 状态 / `send()` / `abort()` / **`hydrateFromDb(sessionId, dtos)`**（跨页面切换不丢历史，从 `structured_json._actionCard` 重建富文本卡片，并按 `i === lastIndex` 给 `plan_options` 卡片打 `isLastMessage` 标记）|
 | `analysisStore` | 单文本输入 → `analyze(text)` |
 | `recoveryStore` | 计划列表 / 当前计划 / 今日任务 / 提交打卡 / 失败时也 fetchDetail |
 | `settingsStore` | 拉取 + 局部更新 + 401 触发重登 |
@@ -569,9 +573,11 @@ CREATE INDEX idx_analytics_events_name_created ON analytics_events(event_name, c
 
 | 组件 | 路径 | 用途 |
 |---|---|---|
-| `MessageList` | `components/chat/MessageList.tsx` | 消息列表 + 自动滚到底 + 空状态占位 |
-| `MessageBubble` | `components/chat/MessageBubble.tsx` | 用户/助手两种气泡 + `<TypingDots>` 动画 + 流式 ▍光标 |
+| `MessageList` | `components/chat/MessageList.tsx` | 消息列表 + 自动滚到底 + 空状态占位 + `<ThinkingBubble>`（intake / 路由阶段的进度提示） |
+| `MessageBubble` | `components/chat/MessageBubble.tsx` | 用户/助手两种气泡 + `<TypingDots>` 动画 + 流式 ▍光标 + `parseMiniMarkdown` 段落渲染 |
 | `ChatInput` | `components/chat/ChatInput.tsx` | textarea + Enter 发送 / Shift+Enter 换行 / 流式中显示"停止"按钮 |
+| `ActionCardRenderer` | `components/cards/ActionCardRenderer.tsx` | 智能融合层卡片分发器：按 `action_type` 路由到 `AnalysisResultCard` / `CoachResultCard` / `PlanCreatedCard` / `PlanOptionsCard` / `CheckinDoneCard` |
+| `PlanOptionsCard` | `components/cards/PlanOptionsCard.tsx` | 计划二选一按钮；接受 `isLastMessage` prop，false 时降级为「已选择计划」静态状态，避免历史消息上的按钮被重复点击 |
 
 ### 客户端持久化
 
@@ -612,44 +618,87 @@ Step 4: 脆弱状态缓冲
     └─ 否则按 intake.next_mode
     │
     ▼
-Step 5: 模式路由
-    ├─ companion → companion-response skill
-    ├─ analysis  → analysis-input.ts 抽 facts → tong-analysis skill
-    ├─ coach     → coach-input.ts 抽 scenario → message-coach skill
+Step 5: 智能融合层 (intent-aware routing, risk < high 才进)
+    │  根据 intake.intent 识别用户的"真实意图"，可能改写 decision.mode 或
+    │  直接生成富文本卡片（不走 skill）：
+    ├─ request_analysis → mode='analysis'
+    ├─ message_coach   → mode='coach'
+    ├─ create_plan(明确)  → 直接 createPlan + push 'plan_created' action
+    ├─ create_plan(模糊)  → push 'plan_options' action + 引导文案 (intentForcedText)
+    ├─ checkin            → completeCheckin + push 'checkin_done' action + 致意文案
+    └─ view_timeline / chat → 不动 decision
+    │  这些 action 事件先存在 pendingActions[]，meta 之后顺序 yield 给前端
+    │
+    ▼
+Step 6: 模式路由
+    ├─ companion → companion-response skill (流式)
+    ├─ analysis  → analysis-input.ts 抽 facts → tong-analysis 预运行 (非流式)
+    │             → push 'analysis_result' action + 设置 skipTextReplay=true
+    ├─ coach     → coach-input.ts 抽 scenario → message-coach 预运行 (非流式)
+    │             → push 'coach_result' action + 设置 skipTextReplay=true
     ├─ recovery  → recovery-input.ts → recovery-plan skill
     └─ safety    → safety-triage skill (规则,不调 AI)
     │
     ▼
-Step 6: 注入长期记忆 (memory_enabled && risk < high)
+Step 7: 注入长期记忆 (memory_enabled && risk < high)
     │  调 getUserMemory + formatMemoryContext → 拼到 system prompt
+    │  额外把 active plan / 是否已打卡作为 extras 拼进 memory_context
     │
     ▼
-Step 7: 收集 skill 输出到 buffer (collectStream)
+Step 8: 收集 skill 输出到 buffer (collectStream)
     │  注意: companion 是流式,但服务端先 buffer 完整内容
+    │  analysis / coach 由预运行已得到 firstText，直接复用
     │
     ▼
-Step 8: Final Response Guard + 重试一次
+Step 9: Final Response Guard + 重试一次
     ├─ 第一次失败 → 重新调一次 skill → 用第二次结果
     └─ 第二次仍失败 → warn 日志 + 输出第二次内容（不回退到第一次）
     │
     ▼
-Step 9: 写 messages 表
+Step 10: sanitizeText 文本清洗 (replay.ts:sanitizeText)
+    │  只过滤 U+FFFD 替换符 + 不可见 ASCII 控制字符 + 压缩 \n{3,} → \n\n
+    │  不动 emoji（按范围过滤会误伤相邻汉字，参见 replay.ts 注释）
+    │
+    ▼
+Step 11: 写 messages 表
     ├─ user 消息 (always; abort 时也写)
-    ├─ assistant 消息 (仅未 abort 时)
+    ├─ assistant 消息 (仅未 abort 时):
+    │   ├─ skipTextReplay 时 content = '[关系分析结果见上方卡片]' / '[话术建议见上方卡片]'
+    │   ├─ 其它情况 content = sanitizeText(finalText)
+    │   └─ structured_json 合并 baseStructured + _actionCard
     └─ intake_result 写入时剥离 reasoning 字段
     │
     ▼
-Step 10: 把 buffered finalText 切成 2-6 字符片段回放给客户端
-    │  (replayChunks, 固定切片不依赖 Anthropic 原始 chunk 边界)
+Step 12: 回放给客户端
+    ├─ pendingActions 顺序 yield 为 'action' 事件 (meta 之后立即推)
+    ├─ skipTextReplay=false: 把 finalText 切成 2-6 字符片段 yield 'delta' 事件
+    │  (replayChunks, 固定切片，按 Unicode 码点切防止 surrogate pair 截断)
+    └─ skipTextReplay=true (analysis / coach): 跳过 delta 回放，前端只渲染卡片
     │
     ▼
-Step 11: fire-and-forget 异步任务
+Step 13: fire-and-forget 异步任务
     ├─ generateSessionSummary (memory_enabled && risk < high)
     └─ extractAndSaveEntities (同上)
     │
     ▼
-SSE 输出: data: {"type":"meta",...} → data: {"type":"delta",...} × N → data: {"type":"done","metadata":{...}}
+SSE 输出: data: {"type":"thinking",...} → data: {"type":"meta",...} → data: {"type":"action",...} × M → data: {"type":"delta",...} × N → data: {"type":"done","metadata":{...}}
 ```
+
+### 智能融合层与 ActionCard 持久化
+
+`pendingActions[]` 是 orchestrator 在 Step 5/6 收集的「富文本卡片事件」缓冲，最多 5 种类型：
+
+| `action_type` | 来源 | 前端卡片 |
+|---|---|---|
+| `analysis_result` | tong-analysis 预运行成功 | `AnalysisResultCard` |
+| `coach_result`    | message-coach 预运行成功 | `CoachResultCard`    |
+| `plan_created`    | intent=create_plan + 明确类型 → createPlan 成功 | `PlanCreatedCard`    |
+| `plan_options`    | intent=create_plan + 模糊 → 二选一引导 | `PlanOptionsCard`    |
+| `checkin_done`    | intent=checkin + 当日未打卡 → completeCheckin | `CheckinDoneCard`    |
+
+写 messages 表时，`pendingActions[0]` 会被打包成 `_actionCard: { action_type, payload }` 合并进 `structured_json`，前端 `chatStore.hydrateFromDb` 在加载历史会话时从这里重建 `ChatViewMessage.actionCard`，**保证刷新页面后历史卡片不丢失**。
+
+`PlanOptionsCard` 特殊处理：hydrate 时按 `i === lastIndex` 标记 `isLastMessage`，false 时渲染「已选择计划」静态状态，避免用户在历史消息上重复点击。
 
 ### 为什么 buffer-then-replay 而不是真正流式
 
@@ -700,6 +749,11 @@ function runXxx(input, deps): AsyncIterable<string>
 - 每个 skill 都有 `parser.ts` + `SAFE_DEFAULT_*`：解析失败永远走兜底，不抛错
 - 所有 prompt 都要求严格 JSON 输出
 - 严禁直接暴露给前端，必须由 orchestrator 调度（通过 `BlockedByRiskError` 第二道防线强制约束）
+- **emoji 硬约束**：`companion-response` 与 `message-coach` 的 system prompt 都明确禁止任何 emoji 输出（含功能性符号 ✓ ✅）。理由：SSE 流式分片 + 前端 JSON 解析在某些边缘 case 会让多字节字符变成 ◆，从源头禁产生 emoji 比在传输/渲染层补救稳得多。前端字体本身（Noto Sans SC）能渲染 emoji，所以这只是输出策略，不是字体限制。
+
+### Schema 严格性（`packages/shared/src/schemas/analysis.ts`）
+
+`AnalysisResultSchema.tone` 是严格白名单 `z.enum(['gentle', 'neutral', 'direct'])`，**不挂 `.catch()` 兜底**。任何非法 tone 一律让 `safeParse` 失败，由 parser 层统一降级到 `SAFE_DEFAULT_ANALYSIS`——schema 作为契约边界保持严格，AI 输出的容错统一在 parser 层做一次，不要散落到多处。
 
 ### tong-analysis 的特殊说明
 
@@ -711,6 +765,17 @@ function runXxx(input, deps): AsyncIterable<string>
 - **完整设计文档**：见 [`packages/skills/tong-analysis/PROMPT_DESIGN.md`](../packages/skills/tong-analysis/PROMPT_DESIGN.md)
 
 一句话：**我们抄了他的思维内核，没抄他的语气**。这样既能用上验证过的关系洞察框架，又不破坏我们的 Final Response Guard 七项检查。
+
+**Parser 健壮性设计**（`packages/skills/tong-analysis/src/parser.ts`）：
+
+| 解析层 | 触发条件 | 兜底结果 |
+|---|---|---|
+| 1. `JSON.parse(jsonStr)` | 模型按 spec 输出干净 JSON | 通过 `AnalysisResultSchema` 校验后返回完整 `AnalysisResult` |
+| 2. `repairUnescapedQuotes` | 模型在 JSON 字符串值内部写了未转义的英文 `"` | 修复后再次 parse，成功则同上 |
+| 3. `extractAnalysisFromTruncated` | 模型 `finish_reason=length` 截断在 analysis 字段中段，连收口大括号都没有 | 状态机抠出已写的 analysis 文本，包成 `confidence: 0.3` 的"降级但有信息"结果，区别于 `SAFE_DEFAULT_ANALYSIS` 的 `confidence: 0`「完全没拿到」 |
+| 4. `SAFE_DEFAULT_ANALYSIS` | 上述都失败 / schema 校验不通过 | 一段克制的「无法基于现有信息分析」文案 |
+
+`runTongAnalysis` 默认 `max_tokens: 4096`（之前是 2048，中文场景下 6 字段输出经常被 finish_reason=length 截断），orchestrator 想自定义仍可通过 `deps.maxTokens` 覆盖。
 
 ### 各 skill 的输入输出（简化版）
 
@@ -761,7 +826,9 @@ output: { meta: SafetyResponse, stream: AsyncIterable<string> }
 
 ### Final Response Guard（CLAUDE.md §13.2）
 
-`packages/core-ai/src/guard.ts` 实现 7 项检查：
+`packages/core-ai/src/guard.ts` 在跑 7 项检查前先调一次内部 `sanitizeForGuard`：清掉 `U+FFFD` 替换符与不可见 ASCII 控制字符（emoji 一律放行），避免乱码符号穿插切断关键词正则匹配（例如 emoji 插在「建议」中间导致 `has_actionable_suggestion` 误判）。Guard 只读不写，真正的 wire-level 清洗由 orchestrator 在 Step 10 用 `replay.ts:sanitizeText` 统一做一次。
+
+7 项检查清单：
 
 | 检查 | 实现策略 | 备注 |
 |---|---|---|
@@ -1091,6 +1158,7 @@ location / {
 | **5** | ✅ | 短期 / 长期记忆、relationship_entities / events、memory_summaries、`/api/memory/timeline` + `/delete` 接口、成长页 |
 | **6** | ✅ | 7-day-breakup / 14-day-rumination 计划、recovery-plan skill、单日任务、心情打卡、幂等保护 |
 | **7** | ✅ | safety AI 二次分类、guard 强化、健康检查接口（DB+Redis+version+uptime）、限流（Redis store+内存 fallback）、analytics 埋点、生产环境校验、settings 接口、auto-title、VPS 一键部署脚本 |
+| **7+** | ✅ | 智能融合层 `pendingActions` + 5 种 ActionCard 持久化（`structured_json._actionCard`）；analysis/coach 跳过文字回放（`skipTextReplay`）改为只渲染卡片 + DB 占位符；tong-analysis parser 截断抢救（`extractAnalysisFromTruncated` + `confidence: 0.3`）+ max_tokens 4096；`sanitizeText` 输出清洗（U+FFFD + 控制字符，**不动 emoji**）；prompt 层硬性禁 emoji；`AnalysisResultSchema.tone` 恢复严格 enum；前端字号体系全站统一 + ChatPage 顶栏导航修复 |
 
 每个 Phase 的关键决策见 `docs/phases/phaseN.md`（如有）。
 
@@ -1359,5 +1427,6 @@ pnpm --filter @emotion/web run build
 | 日期 | 改动 | 责任人 |
 |---|---|---|
 | 2026-04-08 | 初次完整整理，覆盖 Phase 0-7 全部架构 | Phase 7 部署完成时 |
+| 2026-04-09 | Phase 7+ 维护期更新：智能融合层 ActionCard 持久化（`structured_json._actionCard` + hydrate 重建）；analysis/coach 引入 `skipTextReplay`，DB 写占位符避免文字与卡片重复；tong-analysis parser 增加截断抢救路径 + maxTokens 升 4096；orchestrator 输出统一过 `sanitizeText`（只过滤 U+FFFD 与控制字符，emoji 放行）；guard 内置 `sanitizeForGuard`；message-coach / companion-response prompt 硬性禁 emoji；`AnalysisResultSchema.tone` 恢复严格 enum；前端全站字号统一 + ChatPage 顶栏导航修复 | 维护轮 |
 
 > 后续每个 Phase 完成或重大架构调整后，请在此追加一行。

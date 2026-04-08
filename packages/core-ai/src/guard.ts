@@ -164,10 +164,29 @@ const CHECKS: CheckEntry[] = [
   { name: 'no_dangerous_content', run: (c) => noDangerousContent(c.reply) },
 ];
 
+/**
+ * 与 orchestrator/replay.sanitizeText 保持同步：
+ * guard 校验前清掉真正的乱码源头（U+FFFD 替换符、不可见控制字符），
+ * emoji 和其它正常字符一律放行——按 Unicode 范围误删 emoji 会
+ * 把相邻汉字一起截断，参见 replay.sanitizeText 的注释。
+ *
+ * 注意：guard 只读不写，不会回传清洗结果。真正的输出清洗仍由 orchestrator
+ * 在 replayChunks 之前统一做一次。
+ */
+function sanitizeForGuard(text: string): string {
+  return text
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    .replace(/\uFFFD/g, '');
+}
+
 export function runFinalResponseGuard(ctx: GuardContext): GuardCheckResult {
+  const sanitizedCtx: GuardContext = {
+    ...ctx,
+    reply: sanitizeForGuard(ctx.reply),
+  };
   const failed: GuardCheckName[] = [];
   for (const check of CHECKS) {
-    if (!check.run(ctx)) {
+    if (!check.run(sanitizedCtx)) {
       failed.push(check.name);
     }
   }

@@ -14,6 +14,12 @@ export interface ActionCard {
   action_type: ActionCardType;
   payload: unknown;
   createdAt: string;
+  /**
+   * 仅 plan_options 卡片使用：true 表示这条消息是会话的最后一条
+   * （用户尚未做出选择），渲染按钮；false 表示用户已选过，渲染只读状态。
+   * 由 hydrateFromDb 在装载历史时根据消息位置写入。
+   */
+  isLastMessage?: boolean;
 }
 
 export interface ChatViewMessage {
@@ -82,14 +88,37 @@ export const useChatStore = create<ChatState>((set, get) => ({
   hydrateFromDb(sessionId, dtos) {
     // 流式期间禁止覆盖（避免把正在显示的 streaming 占位消息抹掉）
     if (get().status === 'streaming') return;
-    const messages: ChatViewMessage[] = dtos
-      .filter((m) => m.role === 'user' || m.role === 'assistant')
-      .map((m) => ({
+    const filtered = dtos.filter(
+      (m) => m.role === 'user' || m.role === 'assistant'
+    );
+    const lastIndex = filtered.length - 1;
+    const messages: ChatViewMessage[] = filtered.map((m, i) => {
+      const view: ChatViewMessage = {
         id: m.id,
         role: m.role as 'user' | 'assistant',
         content: m.content,
         createdAt: m.created_at,
-      }));
+      };
+      // 重建 actionCard：assistant 消息的 structured_json 里若有 _actionCard
+      // 字段，恢复成内存中的 ActionCard 对象，让历史卡片刷新后仍然显示
+      if (m.role === 'assistant' && m.structured_json) {
+        const raw = (m.structured_json as Record<string, unknown>)._actionCard;
+        if (raw && typeof raw === 'object') {
+          const ac = raw as { action_type?: string; payload?: unknown };
+          if (ac.action_type) {
+            view.actionCard = {
+              id: m.id,
+              action_type: ac.action_type as ActionCardType,
+              payload: ac.payload,
+              createdAt: m.created_at,
+              // plan_options 仅当这条是最后一条消息时才允许选择
+              isLastMessage: i === lastIndex,
+            };
+          }
+        }
+      }
+      return view;
+    });
     set({
       messages,
       hydratedSessionId: sessionId,

@@ -8,6 +8,7 @@ export interface MessageRow {
   content: string;
   risk_level: RiskLevel | null;
   created_at: Date;
+  structured_json: Record<string, unknown> | null;
 }
 
 function toDTO(row: MessageRow): MessageDTO {
@@ -18,6 +19,7 @@ function toDTO(row: MessageRow): MessageDTO {
     content: row.content,
     risk_level: row.risk_level,
     created_at: row.created_at.toISOString(),
+    structured_json: row.structured_json ?? null,
   };
 }
 
@@ -45,7 +47,7 @@ export function createMessageRepository(pool: Pool): MessageRepository {
   return {
     async listBySession(sessionId) {
       const res = await pool.query<MessageRow>(
-        `SELECT id, session_id, role, content, risk_level, created_at
+        `SELECT id, session_id, role, content, risk_level, created_at, structured_json
          FROM messages
          WHERE session_id = $1
          ORDER BY created_at ASC`,
@@ -56,9 +58,9 @@ export function createMessageRepository(pool: Pool): MessageRepository {
 
     async recentBySession(sessionId, limit) {
       const res = await pool.query<MessageRow>(
-        `SELECT id, session_id, role, content, risk_level, created_at
+        `SELECT id, session_id, role, content, risk_level, created_at, structured_json
          FROM (
-           SELECT id, session_id, role, content, risk_level, created_at
+           SELECT id, session_id, role, content, risk_level, created_at, structured_json
            FROM messages
            WHERE session_id = $1
            ORDER BY created_at DESC
@@ -87,7 +89,7 @@ export function createMessageRepository(pool: Pool): MessageRepository {
         `INSERT INTO messages
            (session_id, role, content, risk_level, intake_result, structured_json)
          VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING id, session_id, role, content, risk_level, created_at`,
+         RETURNING id, session_id, role, content, risk_level, created_at, structured_json`,
         [
           input.session_id,
           input.role,

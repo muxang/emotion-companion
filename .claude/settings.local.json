@@ -52,7 +52,9 @@
       "Bash(pnpm --filter web run typecheck)",
       "Bash(pnpm --filter @emotion/companion-response run test)",
       "Bash(pnpm --filter api run typecheck)",
-      "Bash(pnpm --filter web run test -- --run)"
+      "Bash(pnpm --filter web run test -- --run)",
+      "Bash(node:*)",
+      "Bash(pnpm --filter @emotion/skill-message-coach run test)"
     ]
   }
 }

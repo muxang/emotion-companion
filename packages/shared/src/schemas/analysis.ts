@@ -30,8 +30,8 @@ export const AnalysisResultSchema = z.object({
   advice: z.string().min(1),
   // confidence 用 coerce 以防 AI 返回字符串 "0.7"
   confidence: z.coerce.number().min(0).max(1),
-  // tone 容错：AI 偶尔返回中文或非预期值时降级为 neutral，而不是让整个解析失败
-  tone: z.enum(['gentle', 'neutral', 'direct']).catch('neutral'),
+  // tone 严格白名单：非 gentle/neutral/direct 一律拒绝，由 parser 统一降级为 SAFE_DEFAULT
+  tone: z.enum(['gentle', 'neutral', 'direct']),
 });
 
 /**

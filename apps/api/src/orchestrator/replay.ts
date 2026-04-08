@@ -14,6 +14,29 @@ const CHUNK_MIN = 2;
 const CHUNK_MAX = 6;
 const CHUNK_DELAY_MS = 12;
 
+/**
+ * 清洗 AI 输出文本。
+ *
+ * 历史教训：之前曾试图按 Unicode 范围过滤 emoji 和私有区，
+ * 结果误伤了相邻汉字，出现「所◆◆我就来了」式乱码。emoji 本身在
+ * Noto Sans SC 字体下渲染没问题，真正会变成 ◆ 的只有 U+FFFD 替换符
+ * 和不可见控制字符。所以这里只过滤这两类，emoji 一律放行。
+ *
+ * 保留：换行、制表符、所有正常字符（含 emoji、特殊符号）
+ * 移除：U+FFFD 替换符、不可见 ASCII 控制字符
+ * 整理：3 个及以上连续换行压成 2 个，trim
+ */
+export function sanitizeText(text: string): string {
+  return text
+    // 不可见 ASCII 控制字符（保留 \t=\x09, \n=\x0A, \r=\x0D）
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    // U+FFFD 替换字符：真正的乱码源头
+    .replace(/\uFFFD/g, '')
+    // 3 个及以上连续换行压成 2 个，避免大段空白
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function nextChunkSize(): number {
   return CHUNK_MIN + Math.floor(Math.random() * (CHUNK_MAX - CHUNK_MIN + 1));
 }

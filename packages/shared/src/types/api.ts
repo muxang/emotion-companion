@@ -51,6 +51,12 @@ export interface MessageDTO {
   content: string;
   risk_level: RiskLevel | null;
   created_at: string;
+  /**
+   * 结构化附加数据（如分析结果、话术建议、富文本卡片）。
+   * orchestrator 写入时可包含 `_actionCard: { action_type, payload }`，
+   * 用于前端 hydrate 时重建 ActionCard。
+   */
+  structured_json?: Record<string, unknown> | null;
 }
 
 export interface SessionDetailDTO extends SessionDTO {

@@ -49,7 +49,7 @@ import type {
 } from '@emotion/shared';
 import { decideMode } from './router.js';
 import { placeholderStream } from './placeholder.js';
-import { replayChunks } from './replay.js';
+import { replayChunks, sanitizeText } from './replay.js';
 import { runGuardWithRetry } from './guard-runner.js';
 import {
   buildAnalysisInputFromIntake,
@@ -391,6 +391,8 @@ export async function* orchestrate(
   let analysisInitialText: string | null = null;
   let coachStructured: MessageCoachResult | null = null;
   let coachInitialText: string | null = null;
+  // 当 coach_result 卡片已经承载完整内容时，跳过流式文本回放，避免重复
+  let skipTextReplay = false;
   let recoveryStructured: RecoveryTask | null = null;
   let recoveryInitialText: string | null = null;
   if (decision.mode === 'analysis') {
@@ -420,6 +422,8 @@ export async function* orchestrate(
         action_type: 'analysis_result',
         payload: result as unknown as Record<string, unknown>,
       });
+      // 与 coach 同构：分析结果已由卡片承载，跳过流式文本回放，避免上方再出现一段重复文字
+      skipTextReplay = true;
     } catch (err) {
       if (err instanceof BlockedByRiskError) {
         // 第二道防线触发：orchestrator 路由层应已拦截，但仍降级到 safety
@@ -463,6 +467,8 @@ export async function* orchestrate(
         action_type: 'coach_result',
         payload: result as unknown as Record<string, unknown>,
       });
+      // 卡片已经承载所有内容，跳过流式文本回放，避免上方再出现一段重复文字
+      skipTextReplay = true;
     } catch (err) {
       if (err instanceof CoachBlockedByRiskError) {
         // 第二道防线触发：路由层应已拦截 high/critical，但仍降级到 safety
@@ -780,37 +786,75 @@ export async function* orchestrate(
     finalText =
       '我在这里。如果你愿意，可以慢慢说说现在最想被听到的是什么。';
   }
+  // 文本清洗：移除前端字体渲染会显示成 ◆◆◆ 的字符（U+FFFD / 私有区 / 装饰 emoji /
+  // 不可见控制字符），并压缩多余空行。回放与持久化都使用清洗后的版本。
+  finalText = sanitizeText(finalText);
   void secondTextHolder; // 仅用于调试时观察
 
   // ---------- Step 9: 回放给客户端 ----------
   // 在中途 abort 时停止回放，且不写 assistant 消息
   let aborted = false;
-  for await (const slice of replayChunks(finalText, deps.signal)) {
-    if (deps.signal.aborted) {
-      aborted = true;
-      break;
+  if (!skipTextReplay) {
+    for await (const slice of replayChunks(finalText, deps.signal)) {
+      if (deps.signal.aborted) {
+        aborted = true;
+        break;
+      }
+      yield { type: 'delta', content: slice };
     }
-    yield { type: 'delta', content: slice };
   }
   if (deps.signal.aborted) aborted = true;
 
   // ---------- Step 8: 写 assistant message（仅未中止）----------
   if (!aborted) {
     try {
+      // 智能融合层持久化：把首个 pendingAction（analysis_result / plan_created /
+       // plan_options / checkin_done / coach_result）打包成 _actionCard 写进
+       // structured_json，供前端 hydrateFromDb 时重建富文本卡片。
+       const baseStructured: Record<string, unknown> | null =
+         analysisStructured
+           ? (analysisStructured as unknown as Record<string, unknown>)
+           : coachStructured
+             ? (coachStructured as unknown as Record<string, unknown>)
+             : recoveryStructured
+               ? (recoveryStructured as unknown as Record<string, unknown>)
+               : null;
+       const firstAction = pendingActions[0];
+       const finalStructured: Record<string, unknown> | null =
+         baseStructured || firstAction
+           ? {
+               ...(baseStructured ?? {}),
+               ...(firstAction
+                 ? {
+                     _actionCard: {
+                       action_type: firstAction.action_type,
+                       payload: firstAction.payload,
+                     },
+                   }
+                 : {}),
+             }
+           : null;
+
+      // 跳过文字回放时（analysis / coach），content 字段写入占位符，
+      // 真实内容由 structured_json._actionCard 承载，前端按卡片渲染。
+      let placeholderContent: string | null = null;
+      if (skipTextReplay) {
+        if (decision.mode === 'analysis') {
+          placeholderContent = '[关系分析结果见上方卡片]';
+        } else if (decision.mode === 'coach') {
+          placeholderContent = '[话术建议见下方卡片]';
+        } else {
+          placeholderContent = '[详情见上方卡片]';
+        }
+      }
+
       await deps.repos.messages.append({
         session_id: input.session_id,
         role: 'assistant',
-        content: finalText,
+        content: placeholderContent ?? finalText,
         risk_level: decision.effective_risk,
         intake_result: intakeForDb,
-        structured_json:
-          analysisStructured
-            ? (analysisStructured as unknown as Record<string, unknown>)
-            : coachStructured
-              ? (coachStructured as unknown as Record<string, unknown>)
-              : recoveryStructured
-                ? (recoveryStructured as unknown as Record<string, unknown>)
-                : null,
+        structured_json: finalStructured,
       });
       // 计数 +2（user + assistant）；user 未写时只 +1
       const delta = userWritten ? 2 : 1;

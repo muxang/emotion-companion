@@ -2,6 +2,12 @@ import { useState } from 'react';
 
 export interface PlanOptionsCardProps {
   onSelect: (planType: string) => void;
+  /**
+   * 当这条消息已经不是会话最后一条时（用户已经选过计划），
+   * 渲染只读状态——不显示按钮，只提示"已选择计划"。
+   * hydrateFromDb 在装载历史时根据消息位置写入。
+   */
+  isLastMessage?: boolean;
 }
 
 const OPTIONS: Array<{
@@ -23,6 +29,7 @@ const OPTIONS: Array<{
 
 export function PlanOptionsCard({
   onSelect,
+  isLastMessage = true,
 }: PlanOptionsCardProps): JSX.Element {
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -31,6 +38,19 @@ export function PlanOptionsCard({
     setSelected(type);
     onSelect(message);
   };
+
+  // 历史消息（非最后一条）：用户早就选过了，按钮不再有意义。
+  // 只渲染一段静态提示，避免诱导用户重复点击发送。
+  if (!isLastMessage) {
+    return (
+      <div
+        data-testid="plan-options-card"
+        className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4 shadow-sm"
+      >
+        <div className="text-[14px] text-neutral-500">已选择计划</div>
+      </div>
+    );
+  }
 
   return (
     <div

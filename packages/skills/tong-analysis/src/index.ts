@@ -78,7 +78,9 @@ export async function runTongAnalysis(
     raw = await deps.ai.complete({
       system,
       messages: [{ role: 'user', content: user }],
-      maxTokens: deps.maxTokens ?? 2048,
+      // 4096：分析输出包含 analysis 段落 + evidence / risks / advice 等多个字段，
+      // 之前 2048 在中文场景下偶发被 finish_reason=length 截断在 analysis 字段中段。
+      maxTokens: deps.maxTokens ?? 4096,
       signal: deps.signal,
       timeoutMs: deps.timeoutMs,
     });

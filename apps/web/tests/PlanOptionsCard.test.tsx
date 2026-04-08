@@ -29,4 +29,12 @@ describe('<PlanOptionsCard />', () => {
     fireEvent.click(other);
     expect(onSelect).toHaveBeenCalledTimes(1);
   });
+
+  it('isLastMessage=false 时不显示按钮，只显示已选择计划提示', () => {
+    const onSelect = vi.fn();
+    render(<PlanOptionsCard onSelect={onSelect} isLastMessage={false} />);
+    expect(screen.queryByTestId('plan-option-7day-breakup')).toBeNull();
+    expect(screen.queryByTestId('plan-option-14day-rumination')).toBeNull();
+    expect(screen.getByText('已选择计划')).toBeInTheDocument();
+  });
 });
