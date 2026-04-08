@@ -12,6 +12,7 @@ import {
 } from '@emotion/skill-tong-analysis';
 import { ok, fail } from '../utils/response.js';
 import { extractAnalysisInput } from '../services/extractAnalysisInput.js';
+import { loadEnv } from '../config/env.js';
 
 /**
  * POST /api/analysis/relationship
@@ -80,11 +81,13 @@ export async function analysisRoutes(app: FastifyInstance): Promise<void> {
     );
 
     // 3. 抽取结构化字段（失败走安全降级，永不抛错；degraded 标记会上传到 route）
+    const env = loadEnv();
     const extractResult = await extractAnalysisInput(
       inputParsed.data.user_text,
       {
         ai: app.aiClient,
         logger: request.log,
+        timeoutMs: env.SKILL_TIMEOUT_MS,
       }
     );
 
@@ -111,6 +114,7 @@ export async function analysisRoutes(app: FastifyInstance): Promise<void> {
       result = await runTongAnalysis(extractResult.input, {
         ai: app.aiClient,
         risk_level,
+        timeoutMs: env.SKILL_TIMEOUT_MS,
       });
     } catch (err) {
       if (err instanceof BlockedByRiskError) {
