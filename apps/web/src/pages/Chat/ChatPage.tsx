@@ -56,6 +56,13 @@ export function ChatPage(): JSX.Element {
     void selectSession(sessions[0]!.id);
   }, [authStatus, sessions, currentSessionId, selectSession]);
 
+  // 当前会话被删除后 currentSessionId 变为 null，立即清空消息列表
+  useEffect(() => {
+    if (currentSessionId === null) {
+      reset([]);
+    }
+  }, [currentSessionId, reset]);
+
   // 从 sessionStore.currentMessages（DB 载入）hydrate 到 chatStore，
   // 这样跨页面切换 / 切换会话回来时不会丢失历史消息。
   // 流式期间禁止覆盖（hydrateFromDb 内部已处理）。
