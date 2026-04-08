@@ -1,6 +1,6 @@
 # Emotion Companion · 系统架构总览
 
-> 最后更新：2026-04-08（Phase 7 部署完成时整理）
+> 最后更新：2026-04-08（Phase 7 部署完成 + 多 Provider 支持）
 >
 > 本文档面向**开发者 / 运维 / 接手维护的人**，目标是让任何人在 30 分钟内掌握这个项目的全貌、可以独立排查线上问题、可以独立做小幅迭代。
 >
@@ -76,7 +76,7 @@
 | 后端 | Node.js 20.6+ + Fastify 4 + TypeScript | 用 `--import tsx` 在生产环境直接加载 .ts |
 | 数据库 | Supabase（云托管 PostgreSQL 15） | TLS 必须开 |
 | 缓存 / 限流 | Upstash Redis（云托管，可选）| 不可用时降级内存 store |
-| AI | `@anthropic-ai/sdk` v0.27 | 默认 `claude-sonnet-4-20250514`，可通过 `ANTHROPIC_BASE_URL` 切中转 |
+| AI | `@anthropic-ai/sdk` v0.27 + `openai` v4 | 多 Provider 支持：`AI_PROVIDER` 可选 anthropic / openai / deepseek / qwen / zhipu / custom；默认 `anthropic` + `claude-sonnet-4-20250514` |
 | 包管理 | pnpm 8.15.5（workspace） | 由 `packageManager` 字段锁定 |
 | 测试框架 | Vitest 1.6 | 全栈统一 |
 | 前端构建 | Vite 5 | 输出到 `apps/web/dist` |
@@ -120,8 +120,9 @@
               │                  (Postgres) (限流/会话缓存)
               │                         ▲
               │                         │
-              └──── AI 调用 ────────────┼─────────► api.anthropic.com
-                                        │           Claude Sonnet 4
+              └──── AI 调用 ────────────┼─────────► AI Provider（由 AI_PROVIDER 决定）
+                                        │           默认：api.anthropic.com / Claude Sonnet 4
+                                        │           可选：DeepSeek / 通义千问 / 智谱 / 自定义中转
                                         │
 ```
 
@@ -133,7 +134,7 @@
 | 后端 API | VPS Node 进程（systemd 守护） | 鉴权、会话 CRUD、对话编排、SSE 推流、记忆 / 恢复 / 设置接口 |
 | Postgres | Supabase 云端 | users / sessions / messages / memory_* / recovery_* / analytics_events |
 | Redis | Upstash 云端（可选） | 限流 store；不可用时降级为 Node 进程内存 |
-| Anthropic | api.anthropic.com | Claude 模型推理 |
+| AI Provider | 由 `AI_PROVIDER` 决定（默认 api.anthropic.com） | 模型推理；可切换为 DeepSeek / 通义千问 / 智谱 / 自定义中转 |
 | DNS | Cloudflare（grey cloud） | A 记录 `api.botjive.net` 指向 VPS IP |
 
 ### 为什么前后端分开
@@ -231,9 +232,14 @@ emotion-companion/
 │   │       ├── schemas/                   # auth / session / chat / intake / analysis / recovery
 │   │       └── constants/                 # GUARD_CHECKS / RISK_LEVEL_ORDER
 │   │
-│   ├── core-ai/                           # ⭐ Anthropic SDK 包装 + Final Response Guard
+│   ├── core-ai/                           # ⭐ AI 客户端抽象层 + Final Response Guard
 │   │   └── src/
-│   │       ├── client.ts                  # AIClient.complete() / streamText()
+│   │       ├── types.ts                   # AIClient 接口 + AIMessage / Options
+│   │       ├── factory.ts                 # createAIClient() — 根据 AI_PROVIDER 选型
+│   │       ├── providers/
+│   │       │   ├── anthropic.ts           # AnthropicClient（@anthropic-ai/sdk）
+│   │       │   └── openai-compatible.ts   # OpenAICompatibleClient（openai v4，兼容 DeepSeek/通义千问/智谱等）
+│   │       ├── client.ts                  # 旧 AnthropicClient（保留兼容）
 │   │       ├── stream.ts                  # collectStream() 工具
 │   │       ├── guard.ts                   # runFinalResponseGuard() 七项检查
 │   │       └── errors.ts                  # AIError
@@ -1213,14 +1219,14 @@ bootstrap.sh 是幂等的，会自动跳过已完成的步骤。
 
 ### 测试覆盖
 
-总共 **约 130+ 用例 / 27 测试文件**，分布：
+总共 **约 150+ 用例 / 29 测试文件**，分布：
 
 | 包 | 文件数 | 用例数 |
 |---|---|---|
 | apps/api | 7 | 50+ |
 | apps/web | 9 | 38 |
 | packages/safety | 2 | 37 |
-| packages/core-ai | 2 | 19 |
+| packages/core-ai | 4 | 42（含 factory 11 + openai-compatible 8）|
 | packages/skills/emotion-intake | 1 | 15 |
 | packages/skills/tong-analysis | 1 | 13 |
 | packages/skills/message-coach | 1 | ~12 |
@@ -1257,9 +1263,11 @@ bootstrap.sh 是幂等的，会自动跳过已完成的步骤。
 ```env
 NODE_ENV=production
 
-# AI
-ANTHROPIC_API_KEY=sk-ant-...
-ANTHROPIC_BASE_URL=                    # 留空走官方
+# AI Provider — anthropic | openai | deepseek | qwen | zhipu | custom
+AI_PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-...           # AI_PROVIDER=anthropic 时必填
+OPENAI_API_KEY=                        # AI_PROVIDER ∈ openai/deepseek/qwen/zhipu/custom 时必填
+OPENAI_BASE_URL=                       # 可选：覆盖 provider 默认 URL；AI_PROVIDER=custom 时必填
 AI_MODEL=claude-sonnet-4-20250514
 AI_MAX_TOKENS=1024
 INTAKE_TIMEOUT_MS=10000

@@ -1,232 +1,191 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildCompanionPrompt,
-  inferTone,
   finalizeCompanionText,
   COMPANION_EMPTY_FALLBACK,
   runCompanionResponse,
 } from '../src/index.js';
 import type { AIClient } from '@emotion/core-ai';
-import type { IntakeResult } from '@emotion/shared';
 
-function fakeIntake(partial: Partial<IntakeResult> = {}): IntakeResult {
-  return {
-    emotion_state: 'mixed',
-    issue_type: 'general',
-    risk_level: 'low',
-    next_mode: 'companion',
-    confidence: 0.8,
-    reasoning: 'test',
-    ...partial,
-  };
-}
+// ============================================================
+// buildCompanionPrompt — 系统 prompt 内容校验
+// ============================================================
 
-describe('companion-response.inferTone', () => {
-  it('uses explicit tone_preference when provided', () => {
-    expect(
-      inferTone({
-        user_text: '随便',
-        emotion_state: 'sad', // 否则会推断 warm
-        tone_preference: 'direct',
-      })
-    ).toBe('direct');
-  });
-
-  it('returns warm for sad / lonely / desperate', () => {
-    expect(inferTone({ user_text: '', emotion_state: 'sad' })).toBe('warm');
-    expect(inferTone({ user_text: '', emotion_state: 'lonely' })).toBe('warm');
-    expect(inferTone({ user_text: '', emotion_state: 'desperate' })).toBe(
-      'warm'
-    );
-  });
-
-  it('returns rational for relationship-eval / ambiguous', () => {
-    expect(
-      inferTone({
-        user_text: '',
-        emotion_state: 'confused',
-        intake: fakeIntake({ issue_type: 'relationship-eval' }),
-      })
-    ).toBe('rational');
-    expect(
-      inferTone({
-        user_text: '',
-        emotion_state: 'confused',
-        intake: fakeIntake({ issue_type: 'ambiguous' }),
-      })
-    ).toBe('rational');
-  });
-
-  it('falls back to warm by default', () => {
-    expect(inferTone({ user_text: '', emotion_state: 'mixed' })).toBe('warm');
-    expect(
-      inferTone({
-        user_text: '',
-        emotion_state: 'angry',
-        intake: fakeIntake({ issue_type: 'general' }),
-      })
-    ).toBe('warm');
-  });
-});
-
-describe('companion-response.buildCompanionPrompt — tone variants', () => {
-  it('warm: produces warm system prompt with empathy first', () => {
-    const { system, tone } = buildCompanionPrompt({
-      user_text: '一个人在房间里好难受',
-      emotion_state: 'lonely',
+describe('companion-response.buildCompanionPrompt — 童锦程框架 prompt', () => {
+  it('系统 prompt 包含 5 个心智模型关键词', () => {
+    const { system } = buildCompanionPrompt({
+      user_text: '他突然冷淡了我',
+      emotion_state: 'anxious',
     });
-    expect(tone).toBe('warm');
-    expect(system).toContain('warm');
-    expect(system).toContain('温柔');
-    // 必须强调结尾追问
-    expect(system).toContain('开放式追问');
+    expect(system).toContain('吸引力原则');
+    expect(system).toContain('给台阶');
+    expect(system).toContain('人性不可考验');
+    expect(system).toContain('自我炫耀即自我暴露');
+    expect(system).toContain('社会现实是条件性的');
   });
 
-  it('warm: respects explicit warm preference', () => {
-    const { system, tone } = buildCompanionPrompt({
-      user_text: '想找人说说话',
-      emotion_state: 'mixed',
-      tone_preference: 'warm',
-    });
-    expect(tone).toBe('warm');
-    expect(system).toContain('温柔');
-  });
-
-  it('rational: triggered by relationship-eval intake', () => {
-    const { system, tone } = buildCompanionPrompt({
-      user_text: '我们到底合不合适',
+  it('系统 prompt 包含童式口语化开场标记', () => {
+    const { system } = buildCompanionPrompt({
+      user_text: '我不知道怎么办',
       emotion_state: 'confused',
-      intake: fakeIntake({ issue_type: 'relationship-eval' }),
     });
-    expect(tone).toBe('rational');
-    expect(system).toContain('rational');
-    expect(system).toContain('平静');
+    expect(system).toContain('说白了');
+    expect(system).toContain('你听我说');
   });
 
-  it('rational: respects explicit rational preference', () => {
-    const { system, tone } = buildCompanionPrompt({
-      user_text: '帮我看看',
+  it('系统 prompt 要求开放式追问结尾以"？"结尾', () => {
+    const { system } = buildCompanionPrompt({
+      user_text: '分手了我很难受',
+      emotion_state: 'sad',
+    });
+    expect(system).toContain('开放式追问');
+    expect(system).toContain('？');
+  });
+
+  it('系统 prompt 禁止鸡汤措辞', () => {
+    const { system } = buildCompanionPrompt({
+      user_text: '随便',
       emotion_state: 'mixed',
-      tone_preference: 'rational',
     });
-    expect(tone).toBe('rational');
-    expect(system).toContain('陈述句');
+    expect(system).toContain('鸡汤');
+    expect(system).toContain('相信自己');
   });
 
-  it('direct: respects explicit direct preference', () => {
-    const { system, tone } = buildCompanionPrompt({
-      user_text: '直接告诉我下一步',
-      emotion_state: 'angry',
-      tone_preference: 'direct',
+  it('系统 prompt 包含安全约束：不做绝对承诺、不制造依赖', () => {
+    const { system } = buildCompanionPrompt({
+      user_text: '我好累',
+      emotion_state: 'numb',
     });
-    expect(tone).toBe('direct');
-    expect(system).toContain('direct');
-    expect(system).toContain('直白');
+    expect(system).toContain('永远');
+    expect(system).toContain('只有我');
+    expect(system).toContain('依赖');
   });
 
-  it('direct: short sentences emphasized', () => {
-    const { system, tone } = buildCompanionPrompt({
-      user_text: '我现在该怎么办',
+  it('系统 prompt 标注 risk_level >= high 时不应调用此 prompt', () => {
+    const { system } = buildCompanionPrompt({
+      user_text: '随便',
       emotion_state: 'mixed',
-      tone_preference: 'direct',
     });
-    expect(tone).toBe('direct');
-    expect(system).toContain('短句');
+    expect(system).toContain('risk_level');
+    expect(system).toContain('safety');
   });
 
-  it('all tone prompts forbid markdown / json wrapping', () => {
-    for (const t of ['warm', 'rational', 'direct'] as const) {
-      const { system } = buildCompanionPrompt({
-        user_text: 'x',
-        emotion_state: 'mixed',
-        tone_preference: t,
-      });
-      expect(system).toContain('markdown');
-      expect(system).toContain('JSON');
-      expect(system).toContain('永远');
-    }
-  });
-
-  it('all tone prompts require closing open question with ？', () => {
-    for (const t of ['warm', 'rational', 'direct'] as const) {
-      const { system } = buildCompanionPrompt({
-        user_text: 'x',
-        emotion_state: 'mixed',
-        tone_preference: t,
-      });
-      expect(system).toContain('？');
-      expect(system).toContain('开放式追问');
-    }
+  it('禁止 markdown / JSON 包装的文字写在 prompt 里', () => {
+    const { system } = buildCompanionPrompt({
+      user_text: '随便',
+      emotion_state: 'mixed',
+    });
+    expect(system).toContain('markdown');
+    expect(system).toContain('JSON');
   });
 });
 
-describe('companion-response.buildCompanionPrompt — context injection', () => {
-  it('includes the latest user text and emotion state hint', () => {
+// ============================================================
+// buildCompanionPrompt — 上下文注入
+// ============================================================
+
+describe('companion-response.buildCompanionPrompt — 上下文注入', () => {
+  it('用户文本和情绪标签都注入到最后一条消息', () => {
     const { messages } = buildCompanionPrompt({
-      user_text: '我感觉很孤单',
-      emotion_state: 'lonely',
+      user_text: '他最近老是已读不回',
+      emotion_state: 'anxious',
     });
     const last = messages[messages.length - 1]?.content ?? '';
-    expect(last).toContain('我感觉很孤单');
-    expect(last).toContain('lonely');
+    expect(last).toContain('他最近老是已读不回');
+    expect(last).toContain('anxious');
   });
 
-  it('includes recent history in order, capped at 6', () => {
+  it('历史消息注入，最多取最近 6 条', () => {
     const history = Array.from({ length: 8 }, (_, i) => ({
       role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
       content: `m${i}`,
     }));
     const { messages } = buildCompanionPrompt({
-      user_text: '今天又一个人',
-      emotion_state: 'lonely',
+      user_text: '今天又发生了',
+      emotion_state: 'sad',
       recent_history: history,
     });
     // 6 条历史 + 1 条当前 user_text
     expect(messages).toHaveLength(7);
-    // 取的是最后 6 条 m2..m7
     expect(messages[0]?.content).toBe('m2');
     expect(messages[5]?.content).toBe('m7');
   });
+
+  it('有 memory_context 时注入到 system prompt', () => {
+    const { system } = buildCompanionPrompt({
+      user_text: '他又联系我了',
+      emotion_state: 'mixed',
+      memory_context: '用户与前男友分手三个月，曾经异地三年',
+    });
+    expect(system).toContain('用户与前男友分手三个月');
+    expect(system).toContain('已知长期上下文');
+  });
+
+  it('memory_context 为空字符串时不注入', () => {
+    const { system } = buildCompanionPrompt({
+      user_text: '随便',
+      emotion_state: 'mixed',
+      memory_context: '',
+    });
+    expect(system).not.toContain('已知长期上下文');
+  });
+
+  it('无 recent_history 时 messages 只有 1 条（当前 user_text）', () => {
+    const { messages } = buildCompanionPrompt({
+      user_text: '只有一条消息',
+      emotion_state: 'lonely',
+    });
+    expect(messages).toHaveLength(1);
+  });
 });
 
+// ============================================================
+// finalizeCompanionText
+// ============================================================
+
 describe('companion-response.finalizeCompanionText', () => {
-  it('passes through normal text trimmed', () => {
+  it('正常文本 trim 后原样返回', () => {
     expect(finalizeCompanionText('  你好  ')).toBe('你好');
   });
 
-  it('returns fallback on empty', () => {
+  it('空字符串返回 fallback', () => {
     expect(finalizeCompanionText('')).toBe(COMPANION_EMPTY_FALLBACK);
   });
 
-  it('returns fallback on whitespace-only', () => {
+  it('纯空白返回 fallback', () => {
     expect(finalizeCompanionText('   \n\t  ')).toBe(COMPANION_EMPTY_FALLBACK);
   });
 
-  it('fallback itself ends with an open question (？)', () => {
+  it('fallback 本身以开放式追问"？"结尾', () => {
     expect(COMPANION_EMPTY_FALLBACK).toContain('？');
   });
 });
 
+// ============================================================
+// runCompanionResponse
+// ============================================================
+
 describe('companion-response.runCompanionResponse', () => {
-  it('returns an AsyncIterable that yields chunks from AI', async () => {
+  it('返回 AsyncIterable，正常产出 AI 块', async () => {
     const ai = {
       complete: async () => '',
       streamText: () => ({
         async *[Symbol.asyncIterator]() {
-          yield '我';
-          yield '听到';
-          yield '你了';
+          yield '说白了兄弟，';
+          yield '你现在最需要的是';
+          yield '把注意力拉回自己身上。';
         },
       }),
-      getModel: () => 'fake',
+      provider: 'fake',
+      model: 'fake',
     } as unknown as AIClient;
 
     const stream = runCompanionResponse(
-      { user_text: '难过', emotion_state: 'sad' },
+      { user_text: '他不理我了', emotion_state: 'anxious' },
       { ai }
     );
     let acc = '';
     for await (const chunk of stream) acc += chunk;
-    expect(acc).toBe('我听到你了');
+    expect(acc).toBe('说白了兄弟，你现在最需要的是把注意力拉回自己身上。');
   });
 });

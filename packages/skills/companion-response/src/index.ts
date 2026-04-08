@@ -1,16 +1,18 @@
 /**
- * Companion Response Skill - Phase 2
+ * Companion Response Skill - Phase 2 → Phase 7+
  *
  * 流式：直接对接 core-ai/AIClient.streamText。
  * 输出 AsyncIterable<string>，由 orchestrator 收集后过 guard 再回放给客户端。
+ *
+ * 语气框架：童锦程思维模型（统一 prompt，无多 tone 分支）。
  */
 import type { AIClient } from '@emotion/core-ai';
 import { buildCompanionPrompt } from './prompt.js';
 import type { CompanionInput } from './types.js';
 
-export { buildCompanionPrompt, inferTone } from './prompt.js';
+export { buildCompanionPrompt } from './prompt.js';
 export { finalizeCompanionText, COMPANION_EMPTY_FALLBACK } from './parser.js';
-export type { CompanionInput, CompanionTone } from './types.js';
+export type { CompanionInput } from './types.js';
 
 export interface CompanionDeps {
   ai: AIClient;

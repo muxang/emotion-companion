@@ -47,7 +47,9 @@
       "Bash(node -e \"const fs=require\\('fs'\\); const d=JSON.parse\\(fs.readFileSync\\('skill.json','utf8'\\)\\); fs.writeFileSync\\('SKILL.md', Buffer.from\\(d.content,'base64'\\).toString\\('utf-8'\\)\\)\")",
       "Bash(pnpm --filter @emotion/skill-tong-analysis --filter @emotion/api run test)",
       "Bash(pnpm --filter @emotion/core-ai run typecheck)",
-      "Bash(pnpm --filter @emotion/core-ai run test)"
+      "Bash(pnpm --filter @emotion/core-ai run test)",
+      "Bash(pnpm --filter @emotion/skill-companion-response run test)",
+      "Bash(pnpm --filter web run typecheck)"
     ]
   }
 }

@@ -90,7 +90,7 @@ sudo journalctl -u emotion-api -f | grep "<request_id>"
 sudo journalctl -u emotion-api -f | grep "/api/chat"
 
 # 只看 AI 调用相关
-sudo journalctl -u emotion-api -f | grep -i "anthropic\|ai"
+sudo journalctl -u emotion-api -f | grep -i "anthropic\|openai\|ai"
 ```
 
 ### JSON 友好格式（Fastify pino 结构化日志）
@@ -624,7 +624,7 @@ logs-api
 
 # 常见原因:
 # 1. .env 里某个必填字段没填或错了 → 改 .env → restart
-# 2. ANTHROPIC_API_KEY 失效 → 控制台改 key → 改 .env → restart
+# 2. API Key 失效（取决于 AI_PROVIDER：ANTHROPIC_API_KEY 或 OPENAI_API_KEY）→ 改 .env → restart
 # 3. DATABASE_URL 不通 → 试 sudo -u emotion psql "$DATABASE_URL"
 # 4. node_modules 损坏 → 走"强制刷新一切"流程
 # 5. 代码里有 syntax error → 在本地 pnpm typecheck 过了再 push
@@ -744,3 +744,4 @@ sudo nginx -t && sudo systemctl reload nginx
 | 日期 | 改动 |
 |---|---|
 | 2026-04-08 | 初版 |
+| 2026-04-08 | 多 Provider 支持：AI_PROVIDER / OPENAI_API_KEY / OPENAI_BASE_URL；更新 AI 相关排查步骤 |

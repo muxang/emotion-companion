@@ -57,6 +57,14 @@ describe('guard.no_verdict_as_analysis', () => {
     );
     expect(r.failed_checks).not.toContain('no_verdict_as_analysis');
   });
+
+  it('童式直判（说白了他就是不喜欢你了）在 companion 模式不触发', () => {
+    const r = runFinalResponseGuard(
+      ctx('说白了，他就是不喜欢你了，可以试试先把注意力拉回自己身上', 'companion', 'low')
+    );
+    expect(r.passed).toBe(true);
+    expect(r.failed_checks).not.toContain('no_verdict_as_analysis');
+  });
 });
 
 describe('guard.has_actionable_suggestion', () => {
