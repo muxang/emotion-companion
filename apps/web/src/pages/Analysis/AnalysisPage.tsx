@@ -81,7 +81,7 @@ export function AnalysisPage(): JSX.Element {
             <div>
               <label
                 htmlFor="analysis-text"
-                className="mb-1 block text-xs text-neutral-600"
+                className="mb-1 block text-[14px] font-medium text-neutral-600"
               >
                 你想说说什么？
               </label>
@@ -92,7 +92,7 @@ export function AnalysisPage(): JSX.Element {
                 onChange={(e) => setUserText(e.target.value.slice(0, TEXT_MAX))}
                 placeholder={PLACEHOLDER}
                 rows={6}
-                className="min-h-[8rem] w-full resize-y rounded-md border border-neutral-200 bg-neutral-50/50 px-3 py-2 text-sm leading-relaxed text-neutral-800 placeholder:text-neutral-400/60 focus:border-primary-400 focus:outline-none"
+                className="min-h-[8rem] w-full resize-y rounded-md border border-neutral-200 bg-neutral-50/50 px-3 py-2 text-[15px] leading-[1.8] text-neutral-800 placeholder:text-neutral-400/60 focus:border-primary-400 focus:outline-none"
               />
               <div className="mt-1 flex items-center justify-between text-xs">
                 <span
@@ -156,7 +156,7 @@ function AnalysisResultCards({
     <div className="mt-6 space-y-4" data-testid="analysis-result">
       <article className="rounded-lg border-l-4 border-primary-400 border-t border-r border-b border-neutral-200 bg-white p-5">
         <h3 className="mb-2 text-xs font-medium text-neutral-400">分析结论</h3>
-        <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-800">
+        <p className="whitespace-pre-wrap text-[15px] leading-[1.8] text-neutral-800">
           {result.analysis}
         </p>
       </article>
@@ -164,9 +164,9 @@ function AnalysisResultCards({
       {evidence.length > 0 ? (
         <article className="rounded-lg border border-neutral-200 bg-white p-5">
           <h3 className="mb-2 text-xs font-medium text-neutral-400">证据</h3>
-          <ul className="space-y-1 text-sm text-neutral-800">
+          <ul className="space-y-1">
             {evidence.map((item, idx) => (
-              <li key={idx} className="flex gap-2">
+              <li key={idx} className="mb-2 flex gap-2 text-[14px] leading-relaxed text-neutral-800">
                 <span className="text-neutral-400">·</span>
                 <span>{item}</span>
               </li>
@@ -193,7 +193,7 @@ function AnalysisResultCards({
 
       <article className="rounded-lg border border-neutral-200 bg-white p-5">
         <h3 className="mb-2 text-xs font-medium text-neutral-400">建议</h3>
-        <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-800">
+        <p className="whitespace-pre-wrap text-[15px] leading-[1.8] text-neutral-800">
           {result.advice}
         </p>
       </article>

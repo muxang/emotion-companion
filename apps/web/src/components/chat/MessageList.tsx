@@ -35,7 +35,7 @@ export function MessageList({
   }
 
   return (
-    <div className="flex flex-col gap-4 px-4 py-6">
+    <div className="flex flex-col gap-6 px-4 py-6">
       {messages.map((m, i) => {
         // 同一分钟内、相同角色的连续消息不重复显示时间戳
         const prev = messages[i - 1];

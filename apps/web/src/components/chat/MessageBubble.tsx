@@ -79,10 +79,10 @@ export function MessageBubble({
     <div className={`flex w-full flex-col ${isUser ? 'items-end' : 'items-start'}`}>
       <div
         className={[
-          'max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm',
+          'max-w-[75%] whitespace-pre-wrap rounded-2xl px-4 py-3 shadow-sm',
           isUser
-            ? 'bg-primary-500 text-white'
-            : 'border border-neutral-200 bg-white text-neutral-800',
+            ? 'bg-primary-500 text-[15px] leading-[1.7] text-white'
+            : 'border border-neutral-200 bg-white text-[15px] leading-[1.8] text-neutral-800',
         ].join(' ')}
       >
         {isUser ? (

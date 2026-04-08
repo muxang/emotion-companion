@@ -148,7 +148,7 @@ export function ChatPage(): JSX.Element {
   const sidebar = (
     <>
       <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
-        <h2 className="text-sm font-medium text-neutral-800">我的对话</h2>
+        <h2 className="text-[14px] font-medium text-neutral-800">我的对话</h2>
         <button
           type="button"
           className="rounded-md bg-primary-500 px-2 py-1 text-xs text-white hover:bg-primary-600"
@@ -164,7 +164,7 @@ export function ChatPage(): JSX.Element {
             <li
               key={s.id}
               className={[
-                'group flex items-center justify-between gap-2 px-4 py-3 text-sm',
+                'group flex items-center justify-between gap-2 px-4 py-3 text-[14px] leading-snug',
                 isEditing ? '' : 'cursor-pointer',
                 s.id === currentSessionId
                   ? 'bg-primary-100 text-primary-700'
@@ -236,7 +236,7 @@ export function ChatPage(): JSX.Element {
           );
         })}
         {sessions.length === 0 ? (
-          <li className="px-4 py-6 text-center text-xs text-neutral-400">
+          <li className="px-4 py-6 text-center text-[13px] text-neutral-400">
             还没有对话,点上方"新建"开始
           </li>
         ) : null}
@@ -320,25 +320,25 @@ export function ChatPage(): JSX.Element {
           <div className="flex items-center gap-3">
             <Link
               to="/analysis"
-              className="text-xs text-neutral-400 hover:text-primary-600"
+              className="text-[14px] text-neutral-400 hover:text-primary-600"
             >
               关系分析
             </Link>
             <Link
               to="/recovery"
-              className="text-xs text-neutral-400 hover:text-primary-600"
+              className="text-[14px] text-neutral-400 hover:text-primary-600"
             >
               恢复计划
             </Link>
             <Link
               to="/growth"
-              className="text-xs text-neutral-400 hover:text-primary-600"
+              className="text-[14px] text-neutral-400 hover:text-primary-600"
             >
               成长
             </Link>
             <Link
               to="/settings"
-              className="text-xs text-neutral-400 hover:text-primary-600"
+              className="text-[14px] text-neutral-400 hover:text-primary-600"
             >
               设置
             </Link>

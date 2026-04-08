@@ -69,7 +69,7 @@ export function ChatInput({
       <textarea
         aria-label="输入消息"
         // max-h 约 5 行(每行 ~24px)，超出出现滚动条，不无限撑高
-        className="min-h-[44px] max-h-[120px] flex-1 resize-none overflow-y-auto rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-800 outline-none focus:border-primary-400 disabled:opacity-60"
+        className="min-h-[44px] max-h-[120px] flex-1 resize-none overflow-y-auto rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-[15px] leading-relaxed text-neutral-800 outline-none focus:border-primary-400 disabled:opacity-60"
         placeholder="想说什么都可以…"
         rows={1}
         value={value}
