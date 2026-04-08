@@ -91,12 +91,23 @@ export async function* orchestrate(
       input.session_id,
       HISTORY_LIMIT
     );
-    history = recent
+    const raw = recent
       .filter((m) => m.role === 'user' || m.role === 'assistant')
       .map((m) => ({
         role: m.role as 'user' | 'assistant',
         content: m.content,
       }));
+
+    // 合并相邻同角色消息（abort 中断后 user 消息写入但 assistant 未写，
+    // 会产生连续 user 消息，Anthropic API 要求 user/assistant 必须交替）
+    for (const msg of raw) {
+      const last = history[history.length - 1];
+      if (last && last.role === msg.role) {
+        last.content = `${last.content}\n${msg.content}`;
+      } else {
+        history.push({ ...msg });
+      }
+    }
   } catch (err) {
     log.warn({ err, requestId }, 'recent history fetch failed');
   }

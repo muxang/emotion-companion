@@ -35,13 +35,39 @@ function TypingDots(): JSX.Element {
   );
 }
 
-function renderAssistantContent(text: string): JSX.Element[] {
+function renderAssistantContent(text: string): JSX.Element {
   const nodes = parseMiniMarkdown(text);
-  return nodes.map((n, idx) => {
-    if (n.type === 'br') return <br key={idx} />;
-    if (n.type === 'bold') return <strong key={idx}>{n.value}</strong>;
-    return <span key={idx}>{n.value}</span>;
-  });
+
+  // 按 'para' 节点把 nodes 分组成段落
+  const paragraphs: typeof nodes[number][][] = [[]];
+  for (const node of nodes) {
+    if (node.type === 'para') {
+      paragraphs.push([]);
+    } else {
+      paragraphs[paragraphs.length - 1].push(node);
+    }
+  }
+
+  // 过滤掉空段落（例如文本以 \n\n 结尾时产生的空尾段）
+  const nonEmpty = paragraphs.filter((p) => p.length > 0);
+
+  return (
+    <>
+      {nonEmpty.map((paraNodes, pIdx) => (
+        <p
+          key={pIdx}
+          className={pIdx < nonEmpty.length - 1 ? 'mb-3' : ''}
+        >
+          {paraNodes.map((n, nIdx) => {
+            if (n.type === 'br') return <br key={nIdx} />;
+            if (n.type === 'bold') return <strong key={nIdx}>{n.value}</strong>;
+            if (n.type === 'text') return <span key={nIdx}>{n.value}</span>;
+            return null; // 'para' 已在分组阶段排除，此分支理论上不可达
+          })}
+        </p>
+      ))}
+    </>
+  );
 }
 
 export function MessageBubble({
@@ -62,7 +88,7 @@ export function MessageBubble({
         {isUser ? (
           message.content || (message.streaming ? '…' : '')
         ) : message.content ? (
-          <>{renderAssistantContent(message.content)}</>
+          renderAssistantContent(message.content)
         ) : message.streaming ? (
           <TypingDots />
         ) : (

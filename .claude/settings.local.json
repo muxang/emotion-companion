@@ -49,7 +49,8 @@
       "Bash(pnpm --filter @emotion/core-ai run typecheck)",
       "Bash(pnpm --filter @emotion/core-ai run test)",
       "Bash(pnpm --filter @emotion/skill-companion-response run test)",
-      "Bash(pnpm --filter web run typecheck)"
+      "Bash(pnpm --filter web run typecheck)",
+      "Bash(pnpm --filter @emotion/companion-response run test)"
     ]
   }
 }

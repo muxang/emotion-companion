@@ -12,7 +12,7 @@ import type { AIClient } from '@emotion/core-ai';
 // ============================================================
 
 describe('companion-response.buildCompanionPrompt — 童锦程框架 prompt', () => {
-  it('系统 prompt 包含 5 个心智模型关键词', () => {
+  it('系统 prompt 包含思维框架核心关键词', () => {
     const { system } = buildCompanionPrompt({
       user_text: '他突然冷淡了我',
       emotion_state: 'anxious',
@@ -20,8 +20,8 @@ describe('companion-response.buildCompanionPrompt — 童锦程框架 prompt', (
     expect(system).toContain('吸引力原则');
     expect(system).toContain('给台阶');
     expect(system).toContain('人性不可考验');
-    expect(system).toContain('自我炫耀即自我暴露');
-    expect(system).toContain('社会现实是条件性的');
+    expect(system).toContain('真诚');
+    expect(system).toContain('不内耗');
   });
 
   it('系统 prompt 包含童式口语化开场标记', () => {
@@ -30,16 +30,25 @@ describe('companion-response.buildCompanionPrompt — 童锦程框架 prompt', (
       emotion_state: 'confused',
     });
     expect(system).toContain('说白了');
-    expect(system).toContain('你听我说');
+    expect(system).toContain('说实话');
+    expect(system).toContain('我跟你说');
   });
 
-  it('系统 prompt 要求开放式追问结尾以"？"结尾', () => {
+  it('系统 prompt 要求以"是不是？"或"知道吧？"结尾追问', () => {
     const { system } = buildCompanionPrompt({
       user_text: '分手了我很难受',
       emotion_state: 'sad',
     });
-    expect(system).toContain('开放式追问');
-    expect(system).toContain('？');
+    expect(system).toContain('是不是？');
+    expect(system).toContain('知道吧？');
+  });
+
+  it('系统 prompt 称用户为"兄弟"', () => {
+    const { system } = buildCompanionPrompt({
+      user_text: '他不理我了',
+      emotion_state: 'anxious',
+    });
+    expect(system).toContain('兄弟');
   });
 
   it('系统 prompt 禁止鸡汤措辞', () => {
