@@ -10,12 +10,15 @@ export interface MessageListProps {
   emptyState?: JSX.Element | null;
   /** AI 处理中的进度提示；非 null 时在消息列表末尾渲染思考气泡 */
   thinkingMessage?: string | null;
+  /** plan_options 卡片选择后向对话发送一条消息 */
+  onPlanOptionSelect?: (message: string) => void;
 }
 
 export function MessageList({
   messages,
   emptyState,
   thinkingMessage,
+  onPlanOptionSelect,
 }: MessageListProps): JSX.Element {
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -44,7 +47,12 @@ export function MessageList({
           prev.role === m.role &&
           isSameMinute(prev.createdAt, m.createdAt);
         return (
-          <MessageBubble key={m.id} message={m} showTimestamp={!sameMinute} />
+          <MessageBubble
+            key={m.id}
+            message={m}
+            showTimestamp={!sameMinute}
+            onPlanOptionSelect={onPlanOptionSelect}
+          />
         );
       })}
       {thinkingMessage ? <ThinkingBubble message={thinkingMessage} /> : null}

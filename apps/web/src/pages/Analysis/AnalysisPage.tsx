@@ -69,6 +69,9 @@ export function AnalysisPage(): JSX.Element {
       </header>
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">
+        <p className="mb-3 text-[13px] text-neutral-400">
+          你也可以直接在对话里说"帮我分析一下",系统会自动提取信息
+        </p>
         <section className="rounded-lg border border-neutral-200 bg-white p-5">
           <h2 className="mb-1 text-[16px] font-medium text-neutral-800">
             描述你的处境

@@ -167,6 +167,9 @@ export function RecoveryPage(): JSX.Element {
       </header>
 
       <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-6">
+        <p className="mb-3 text-[13px] text-neutral-400">
+          在对话里说"我想打卡"或"开始计划"也可以
+        </p>
         {status === 'loading' && plans.length === 0 ? (
           <div
             className="rounded-lg border border-neutral-200 bg-white p-5 text-sm text-neutral-400"

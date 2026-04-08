@@ -1,11 +1,14 @@
 import type { ChatViewMessage } from '../../stores/chatStore.js';
 import { formatHm } from '../../utils/time.js';
 import { parseMiniMarkdown } from '../../utils/markdown.js';
+import { ActionCardRenderer } from '../cards/ActionCardRenderer.js';
 
 export interface MessageBubbleProps {
   message: ChatViewMessage;
   /** 是否显示时间戳（同一分钟内的连续消息会被去重隐藏） */
   showTimestamp?: boolean;
+  /** plan_options 卡片选择后向对话发送一条消息 */
+  onPlanOptionSelect?: (message: string) => void;
 }
 
 /**
@@ -73,6 +76,7 @@ function renderAssistantContent(text: string): JSX.Element {
 export function MessageBubble({
   message,
   showTimestamp = true,
+  onPlanOptionSelect,
 }: MessageBubbleProps): JSX.Element {
   const isUser = message.role === 'user';
   return (
@@ -98,6 +102,14 @@ export function MessageBubble({
           <span className="ml-0.5 inline-block w-1 animate-pulse">▍</span>
         ) : null}
       </div>
+      {!isUser && message.actionCard ? (
+        <div className="mt-2 w-full max-w-[85%]">
+          <ActionCardRenderer
+            card={message.actionCard}
+            onPlanOptionSelect={onPlanOptionSelect}
+          />
+        </div>
+      ) : null}
       {showTimestamp && message.createdAt ? (
         <time
           data-testid="msg-time"

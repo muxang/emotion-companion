@@ -8,9 +8,9 @@ import { ChatInput } from '../../components/chat/ChatInput.js';
 import { truncate } from '../../utils/time.js';
 
 const QUICK_TOPICS: string[] = [
-  '我最近感情上有些困惑…',
-  '想让你帮我分析一下这段关系',
-  '我有点低落,想找人说说话',
+  '最近感情上有些困惑,想聊聊...',
+  '帮我分析一下这段关系',
+  '我想开始一个恢复计划',
 ];
 
 export function ChatPage(): JSX.Element {
@@ -250,6 +250,9 @@ export function ChatPage(): JSX.Element {
       <p className="mt-2 text-xs text-neutral-400">
         点下面的话题快速开始,也可以直接输入。
       </p>
+      <p className="mt-2 text-center text-[13px] text-neutral-400">
+        直接告诉我你的情况,我来判断怎么帮你
+      </p>
       <div className="mt-6 flex w-full flex-col gap-2">
         {QUICK_TOPICS.map((topic) => (
           <button
@@ -319,18 +322,6 @@ export function ChatPage(): JSX.Element {
           </div>
           <div className="flex items-center gap-3">
             <Link
-              to="/analysis"
-              className="text-[14px] text-neutral-400 hover:text-primary-600"
-            >
-              关系分析
-            </Link>
-            <Link
-              to="/recovery"
-              className="text-[14px] text-neutral-400 hover:text-primary-600"
-            >
-              恢复
-            </Link>
-            <Link
               to="/growth"
               className="text-[14px] text-neutral-400 hover:text-primary-600"
             >
@@ -352,7 +343,12 @@ export function ChatPage(): JSX.Element {
           </div>
         </header>
         <div className="flex-1 overflow-y-auto">
-          <MessageList messages={messages} emptyState={emptyState} thinkingMessage={thinkingMessage} />
+          <MessageList
+            messages={messages}
+            emptyState={emptyState}
+            thinkingMessage={thinkingMessage}
+            onPlanOptionSelect={(text) => void handleSend(text)}
+          />
         </div>
         {error ? (
           <div className="border-t border-rose-200 bg-rose-50 px-4 py-2 text-xs text-rose-700">
