@@ -228,6 +228,17 @@ else
   sudo -u "${APP_USER}" git clone --branch "${BRANCH}" "${REPO_URL}" "${APP_DIR}"
 fi
 
+# ⭐ 关键：把 config.sh 同步到 APP_DIR/scripts/vps/，
+#    不然 deploy.sh 找不到 config（config.sh 在 .gitignore 里,不会被 clone 进来）
+APP_CONFIG="${APP_DIR}/scripts/vps/config.sh"
+if [[ ! -f "${APP_CONFIG}" ]] || ! cmp -s "${CONFIG_FILE}" "${APP_CONFIG}"; then
+  log "  同步 config.sh 到 ${APP_CONFIG}"
+  install -o "${APP_USER}" -g "${APP_USER}" -m 644 "${CONFIG_FILE}" "${APP_CONFIG}"
+  ok "  config.sh 已同步（deploy.sh 之后能直接用）"
+else
+  ok "  ${APP_CONFIG} 已是最新"
+fi
+
 # ============================================================
 # Step 4: 安装依赖 + typecheck（生产用 tsx 加载 .ts,不需要单独 build）
 # ============================================================
