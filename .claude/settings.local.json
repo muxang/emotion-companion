@@ -56,7 +56,8 @@
       "Bash(node:*)",
       "Bash(pnpm --filter @emotion/skill-message-coach run test)",
       "Bash(\" docs/architecture.md | head -40)",
-      "Bash(pnpm --filter web run test -- tests/ChatInput.test.tsx)"
+      "Bash(pnpm --filter web run test -- tests/ChatInput.test.tsx)",
+      "Bash(npx tsc:*)"
     ]
   }
 }
