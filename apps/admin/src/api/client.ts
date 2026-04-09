@@ -72,6 +72,58 @@ export async function adminRequest<T>(
   return payload as T;
 }
 
+/**
+ * 分页列表接口专用：后端把 data (数组) / total / page 放在同级，
+ * adminRequest 只返回 data (丢失 total/page)。
+ * 这里不做 unwrap，把三个字段一起返回给调用方。
+ */
+export interface PaginatedResult<T> {
+  items: T[];
+  total: number;
+  page: number;
+}
+
+export async function adminPaginatedRequest<T>(
+  path: string,
+  options: RequestOptions = {}
+): Promise<PaginatedResult<T>> {
+  const token = options.token ?? getAdminToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (token) headers['X-Admin-Token'] = token;
+
+  const res = await fetch(buildUrl(path, options.query), {
+    method: options.method ?? 'GET',
+    headers,
+    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    signal: options.signal,
+  });
+
+  let payload: Record<string, unknown> = {};
+  const text = await res.text();
+  if (text) {
+    try {
+      payload = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      payload = {};
+    }
+  }
+
+  if (!res.ok) {
+    const p = payload as { error?: { message?: string; code?: string }; message?: string };
+    const message = p.error?.message ?? p.message ?? `请求失败 (${res.status})`;
+    throw new AdminApiError(message, res.status, p.error?.code);
+  }
+
+  const data = Array.isArray(payload.data) ? payload.data : [];
+  return {
+    items: data as T[],
+    total: typeof payload.total === 'number' ? payload.total : 0,
+    page: typeof payload.page === 'number' ? payload.page : 1,
+  };
+}
+
 export async function verifyAdminToken(token: string): Promise<boolean> {
   try {
     await adminRequest<unknown>('/admin/health', { token });

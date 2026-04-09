@@ -1,9 +1,11 @@
-# Emotion Companion API - Nginx 反代配置
-# 模板里的 __API_DOMAIN__ / __NODE_PORT__ 由 setup.sh 替换为实际值
+# Emotion Companion API + Admin API - Nginx 反代配置
+# 模板里的 __API_DOMAIN__ / __NODE_PORT__ / __ADMIN_PORT__ 由 setup.sh 替换
 #
-# 关键点：
-#  - SSE 必须 proxy_buffering off + 长 read_timeout
-#  - certbot --nginx 会在这个文件里追加 listen 443 ssl 与证书路径
+# 路由规则：
+#  - /admin/*  → 127.0.0.1:__ADMIN_PORT__ (admin-api, 普通 HTTP)
+#  - /*        → 127.0.0.1:__NODE_PORT__  (主 API, SSE 需关闭 buffering)
+#
+# certbot --nginx 会在这个文件里追加 listen 443 ssl 与证书路径
 
 server {
     listen 80;
@@ -19,7 +21,22 @@ server {
         root /var/www/html;
     }
 
-    # 其他流量在没有 HTTPS 之前先 200，certbot 会改写这里
+    # ---- Admin API: /admin/* → admin-api (port __ADMIN_PORT__) ----
+    location /admin/ {
+        proxy_pass http://127.0.0.1:__ADMIN_PORT__;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection '';
+
+        proxy_connect_timeout 10s;
+        proxy_read_timeout 30s;
+        proxy_send_timeout 30s;
+    }
+
+    # ---- 主 API: /* → emotion-api (port __NODE_PORT__) ----
     location / {
         proxy_pass http://127.0.0.1:__NODE_PORT__;
         proxy_http_version 1.1;
@@ -38,6 +55,5 @@ server {
     }
 
     client_max_body_size 2m;
-    # 关闭 nginx 默认的 502 自定义错误页，让后端的 SSE error 帧能透传
     proxy_intercept_errors off;
 }

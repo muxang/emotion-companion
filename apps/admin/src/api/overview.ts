@@ -1,41 +1,30 @@
 import { adminRequest } from './client';
 
-export interface OverviewStats {
-  total_users: number;
-  new_users_today: number;
-  messages_today: number;
-  messages_yesterday: number;
-  safety_trigger_rate: number; // 0-1
-  plan_completion_rate: number; // 0-1
-}
-
-export interface MessageTrendPoint {
-  date: string; // YYYY-MM-DD
-  count: number;
-}
-
-export interface ModeShare {
-  mode: string;
-  count: number;
-}
-
-export interface EmotionShare {
-  emotion: string;
-  count: number;
-}
-
-export interface SafetyShare {
-  level: 'low' | 'medium' | 'high' | 'critical';
-  count: number;
-  today_count?: number;
-}
-
+/**
+ * 后端 GET /admin/overview 实际返回的数据结构。
+ * adminRequest 会 unwrap { success, data } 层，这里定义 data 的形状。
+ */
 export interface OverviewData {
-  stats: OverviewStats;
-  message_trend: MessageTrendPoint[];
-  mode_share: ModeShare[];
-  emotion_share: EmotionShare[];
-  safety_share: SafetyShare[];
+  users: {
+    total: number;
+    today: number;
+    this_week: number;
+    this_month: number;
+  };
+  conversations: {
+    total_sessions: number;
+    total_messages: number;
+    today_messages: number;
+    avg_messages_per_user: number;
+  };
+  modes: Record<string, number>;
+  emotions: Record<string, number>;
+  safety_triggers: {
+    total: number;
+    high: number;
+    critical: number;
+    today: number;
+  };
 }
 
 export function fetchOverview(): Promise<OverviewData> {

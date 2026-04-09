@@ -18,7 +18,7 @@ export default function UsersPage() {
   const load = useCallback(
     (p: number, q: string) => {
       setLoading(true);
-      fetchUsers({ page: p, page_size: PAGE_SIZE, q: q || undefined })
+      fetchUsers({ page: p, limit: PAGE_SIZE, search: q || undefined })
         .then((res) => {
           setItems(res.items);
           setTotal(res.total);
@@ -59,8 +59,8 @@ export default function UsersPage() {
       title: '最后活跃',
       render: (row) => formatDateTime(row.last_active_at),
     },
-    { key: 'session_count', title: '会话数' },
-    { key: 'message_count', title: '消息数' },
+    { key: 'total_sessions', title: '会话数' },
+    { key: 'total_messages', title: '消息数' },
     {
       key: 'memory_enabled',
       title: '记忆开关',
@@ -72,9 +72,9 @@ export default function UsersPage() {
         ),
     },
     {
-      key: 'has_recovery_plan',
+      key: 'has_active_plan',
       title: '有计划',
-      render: (row) => (row.has_recovery_plan ? '是' : '-'),
+      render: (row) => (row.has_active_plan ? '是' : '-'),
     },
     {
       key: '_action',

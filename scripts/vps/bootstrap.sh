@@ -36,6 +36,8 @@ API_DOMAIN="api.botjive.net"
 ACME_EMAIL="chairsmu@gmail.com"
 SERVICE_NAME="emotion-api"
 NODE_PORT="3000"
+ADMIN_SERVICE_NAME="emotion-admin-api"
+ADMIN_PORT="3001"
 
 # ============================================================
 # 颜色 + 日志
@@ -117,6 +119,7 @@ ${C_YELLOW}请在开始前确认：${C_RESET}
   ✓ 已准备好 ANTHROPIC_API_KEY
   ✓ 已准备好 Supabase DATABASE_URL
   ✓ 已准备好 Vercel 前端域名 (如果还没部署,可以先填占位,部完前端再回来改)
+  ✓ 已准备好 Admin 前端域名 (同上)
 
 EOF
 
@@ -149,6 +152,7 @@ fi
 ANTHROPIC_API_KEY_INPUT=""
 DATABASE_URL_INPUT=""
 CORS_ORIGIN_INPUT=""
+ADMIN_CORS_ORIGIN_INPUT=""
 REDIS_URL_INPUT=""
 ANTHROPIC_BASE_URL_INPUT=""
 
@@ -194,6 +198,20 @@ if [[ "${SKIP_SECRETS}" == "false" ]]; then
   # 去尾斜杠
   CORS_ORIGIN_INPUT="${CORS_ORIGIN_INPUT%/}"
   ok "  CORS_ORIGIN = ${CORS_ORIGIN_INPUT}"
+
+  # ADMIN_CORS_ORIGIN
+  echo
+  log "  ADMIN_CORS_ORIGIN 是你 admin 前端的最终域名（含 https://）"
+  log "  如果还没部署,可以先填占位"
+  while [[ -z "${ADMIN_CORS_ORIGIN_INPUT}" ]]; do
+    read -rp "  ADMIN_CORS_ORIGIN: " ADMIN_CORS_ORIGIN_INPUT < "${TTY_IN}"
+    if [[ ! "${ADMIN_CORS_ORIGIN_INPUT}" =~ ^https?:// ]]; then
+      warn "  必须以 http:// 或 https:// 开头"
+      ADMIN_CORS_ORIGIN_INPUT=""
+    fi
+  done
+  ADMIN_CORS_ORIGIN_INPUT="${ADMIN_CORS_ORIGIN_INPUT%/}"
+  ok "  ADMIN_CORS_ORIGIN = ${ADMIN_CORS_ORIGIN_INPUT}"
 
   # REDIS_URL（可选）
   echo
@@ -251,6 +269,8 @@ API_DOMAIN="${API_DOMAIN}"
 ACME_EMAIL="${ACME_EMAIL}"
 SERVICE_NAME="${SERVICE_NAME}"
 NODE_PORT="${NODE_PORT}"
+ADMIN_SERVICE_NAME="${ADMIN_SERVICE_NAME}"
+ADMIN_PORT="${ADMIN_PORT}"
 EOF
 ok "  config.sh 已生成"
 
@@ -311,6 +331,17 @@ if [[ "${SKIP_SECRETS}" == "false" ]]; then
   chown "${APP_USER}:${APP_USER}" "${ENV_FILE}"
   chmod 600 "${ENV_FILE}"
   ok "  ${ENV_FILE} 已更新"
+
+  # ---- Admin API .env ----
+  ADMIN_ENV_FILE="${APP_DIR}/apps/admin-api/.env"
+  if [[ -f "${ADMIN_ENV_FILE}" ]]; then
+    log "  更新 ${ADMIN_ENV_FILE}"
+  fi
+  update_env_var "DATABASE_URL" "${DATABASE_URL_INPUT}" "${ADMIN_ENV_FILE}"
+  update_env_var "ADMIN_CORS_ORIGIN" "${ADMIN_CORS_ORIGIN_INPUT}" "${ADMIN_ENV_FILE}"
+  chown "${APP_USER}:${APP_USER}" "${ADMIN_ENV_FILE}"
+  chmod 600 "${ADMIN_ENV_FILE}"
+  ok "  ${ADMIN_ENV_FILE} 已更新"
 fi
 
 # 二次校验：还有占位符就拒绝继续
@@ -349,6 +380,27 @@ if [[ "${SERVICE_OK}" != "true" ]]; then
   exit 1
 fi
 ok "  ${SERVICE_NAME} 已运行"
+
+# ---- Admin API ----
+log "  启动 ${ADMIN_SERVICE_NAME}"
+if systemctl is-enabled --quiet "${ADMIN_SERVICE_NAME}" 2>/dev/null; then
+  systemctl restart "${ADMIN_SERVICE_NAME}"
+  ADMIN_OK=false
+  for i in 1 2 3 4 5; do
+    sleep 1
+    if curl -fsS "http://127.0.0.1:${ADMIN_PORT}/admin/health" >/dev/null 2>&1; then
+      ADMIN_OK=true
+      break
+    fi
+  done
+  if [[ "${ADMIN_OK}" == "true" ]]; then
+    ok "  ${ADMIN_SERVICE_NAME} 已运行"
+  else
+    warn "  ${ADMIN_SERVICE_NAME} 未在 5 秒内响应（不影响主 API，可稍后排查）"
+  fi
+else
+  warn "  ${ADMIN_SERVICE_NAME} unit 未安装（setup.sh 可能未处理，可稍后手动补）"
+fi
 
 # ============================================================
 # 9. 跑数据库迁移

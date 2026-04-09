@@ -68,6 +68,9 @@ for var in REPO_URL BRANCH APP_USER APP_DIR API_DOMAIN ACME_EMAIL SERVICE_NAME N
     exit 1
   fi
 done
+# Admin API 变量（有默认值,允许 config.sh 不含）
+ADMIN_SERVICE_NAME="${ADMIN_SERVICE_NAME:-emotion-admin-api}"
+ADMIN_PORT="${ADMIN_PORT:-3001}"
 if [[ "${REPO_URL}" == *"your-username"* ]]; then
   err "config.sh 中 REPO_URL 还是示例值，请先填真实仓库地址"
   exit 1
@@ -284,11 +287,19 @@ fi
 ok "  tsx 就位"
 
 # 跑一次 typecheck（不生成 dist,仅提前发现 TypeScript 错误）
-log "  pnpm --filter @emotion/api run typecheck"
-if sudo -u "${APP_USER}" -H bash -lc "cd '${APP_DIR}' && pnpm --filter @emotion/api run typecheck" >/dev/null 2>&1; then
-  ok "  typecheck 通过"
-else
-  warn "  typecheck 有报错（部署不会因此停止,但建议本地修一下）"
+for pkg in "@emotion/api" "@emotion/admin-api"; do
+  log "  pnpm --filter ${pkg} run typecheck"
+  if sudo -u "${APP_USER}" -H bash -lc "cd '${APP_DIR}' && pnpm --filter ${pkg} run typecheck" >/dev/null 2>&1; then
+    ok "  ${pkg} typecheck 通过"
+  else
+    warn "  ${pkg} typecheck 有报错（部署不会因此停止,但建议本地修一下）"
+  fi
+done
+
+# 验证 admin-api 的 tsx 也就位
+if [[ ! -d "${APP_DIR}/apps/admin-api/node_modules/tsx" && \
+      ! -L "${APP_DIR}/apps/admin-api/node_modules/tsx" ]]; then
+  warn "tsx 未在 apps/admin-api/node_modules 中找到（admin-api 可能无法启动）"
 fi
 
 # ============================================================
@@ -321,6 +332,37 @@ else
 fi
 
 # ============================================================
+# Step 5b: 准备 apps/admin-api/.env
+# ============================================================
+log "Step 5b/9: 准备 apps/admin-api/.env"
+
+ADMIN_ENV_FILE="${APP_DIR}/apps/admin-api/.env"
+ADMIN_ENV_TEMPLATE="${TEMPLATES_DIR}/admin-env.production.template"
+
+if [[ -f "${ADMIN_ENV_FILE}" ]]; then
+  ok "  ${ADMIN_ENV_FILE} 已存在，不覆盖"
+else
+  if [[ -f "${ADMIN_ENV_TEMPLATE}" ]]; then
+    log "  从模板创建 ${ADMIN_ENV_FILE}"
+    ADMIN_TOKEN_VALUE="$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")"
+    ADMIN_CORS_PLACEHOLDER="https://__YOUR_ADMIN_FRONTEND_DOMAIN__"
+
+    sed \
+      -e "s|__ADMIN_PORT__|${ADMIN_PORT}|g" \
+      -e "s|__NODE_PORT__|${NODE_PORT}|g" \
+      -e "s|__ADMIN_TOKEN_PLACEHOLDER__|${ADMIN_TOKEN_VALUE}|g" \
+      -e "s|__ADMIN_CORS_ORIGIN_FILL_ME__|${ADMIN_CORS_PLACEHOLDER}|g" \
+      "${ADMIN_ENV_TEMPLATE}" > "${ADMIN_ENV_FILE}"
+
+    chown "${APP_USER}:${APP_USER}" "${ADMIN_ENV_FILE}"
+    chmod 600 "${ADMIN_ENV_FILE}"
+    ok "  已生成 admin-api .env，含强随机 ADMIN_TOKEN"
+  else
+    warn "  未找到 ${ADMIN_ENV_TEMPLATE}，跳过"
+  fi
+fi
+
+# ============================================================
 # Step 6: systemd unit（内容变更才 daemon-reload）
 # ============================================================
 log "Step 6/9: 安装 systemd unit"
@@ -349,6 +391,33 @@ else
   ok "  已设置开机自启"
 fi
 
+# ---- Admin API systemd unit ----
+ADMIN_UNIT_TEMPLATE="${TEMPLATES_DIR}/emotion-admin-api.service.template"
+if [[ -f "${ADMIN_UNIT_TEMPLATE}" ]]; then
+  log "  安装 ${ADMIN_SERVICE_NAME} systemd unit"
+  ADMIN_SYSTEMD_UNIT="/etc/systemd/system/${ADMIN_SERVICE_NAME}.service"
+  ADMIN_SYSTEMD_TMP="$(mktemp)"
+  sed \
+    -e "s|__APP_USER__|${APP_USER}|g" \
+    -e "s|__APP_DIR__|${APP_DIR}|g" \
+    -e "s|__ADMIN_SERVICE_NAME__|${ADMIN_SERVICE_NAME}|g" \
+    "${ADMIN_UNIT_TEMPLATE}" > "${ADMIN_SYSTEMD_TMP}"
+
+  if [[ -f "${ADMIN_SYSTEMD_UNIT}" ]] && cmp -s "${ADMIN_SYSTEMD_TMP}" "${ADMIN_SYSTEMD_UNIT}"; then
+    ok "  ${ADMIN_SYSTEMD_UNIT} 内容无变化"
+    rm -f "${ADMIN_SYSTEMD_TMP}"
+  else
+    mv "${ADMIN_SYSTEMD_TMP}" "${ADMIN_SYSTEMD_UNIT}"
+    systemctl daemon-reload
+    ok "  ${ADMIN_SYSTEMD_UNIT} 已更新 + daemon-reload"
+  fi
+
+  if ! systemctl is-enabled --quiet "${ADMIN_SERVICE_NAME}" 2>/dev/null; then
+    systemctl enable "${ADMIN_SERVICE_NAME}" >/dev/null 2>&1 || true
+    ok "  ${ADMIN_SERVICE_NAME} 已设置开机自启"
+  fi
+fi
+
 # ============================================================
 # Step 7: Nginx 反代（内容变更才 reload）
 # ============================================================
@@ -361,6 +430,7 @@ NGINX_TMP="$(mktemp)"
 sed \
   -e "s|__API_DOMAIN__|${API_DOMAIN}|g" \
   -e "s|__NODE_PORT__|${NODE_PORT}|g" \
+  -e "s|__ADMIN_PORT__|${ADMIN_PORT}|g" \
   "${TEMPLATES_DIR}/nginx-emotion-api.conf.template" > "${NGINX_TMP}"
 
 NGINX_CHANGED=false

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   fetchConversations,
   type ConversationItem,
@@ -28,13 +27,11 @@ export default function ConversationsPage() {
   const [modeFilter, setModeFilter] = useState('全部');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const navigate = useNavigate();
-
   const load = useCallback(
     (p: number) => {
       fetchConversations({
         page: p,
-        page_size: PAGE_SIZE,
+        limit: PAGE_SIZE,
         risk_level: riskFilter === '全部' ? undefined : riskFilter,
         mode: modeFilter === '全部' ? undefined : modeFilter,
         date_from: dateFrom || undefined,
@@ -63,31 +60,39 @@ export default function ConversationsPage() {
       ),
     },
     {
-      key: 'content_preview',
+      key: 'content',
       title: '消息内容',
       render: (row) => (
-        <span className="text-neutral-600">{truncate(row.content_preview)}</span>
+        <span className="text-neutral-600">{truncate(row.content)}</span>
       ),
     },
     {
       key: 'risk_level',
       title: '风险等级',
-      render: (row) => <Badge value={row.risk_level} variant="risk" />,
-    },
-    {
-      key: 'conversation_mode',
-      title: '对话模式',
-      render: (row) => <Badge value={row.conversation_mode} variant="mode" />,
-    },
-    {
-      key: 'emotion_state',
-      title: '情绪状态',
       render: (row) =>
-        row.emotion_state ? (
-          <Badge value={row.emotion_state} variant="emotion" />
-        ) : (
-          '-'
-        ),
+        row.risk_level ? <Badge value={row.risk_level} variant="risk" /> : '-',
+    },
+    {
+      key: 'intake_result',
+      title: '对话模式',
+      render: (row) => {
+        const mode =
+          row.intake_result &&
+          typeof row.intake_result === 'object' &&
+          'next_mode' in row.intake_result
+            ? String(row.intake_result.next_mode)
+            : null;
+        return mode ? <Badge value={mode} variant="mode" /> : '-';
+      },
+    },
+    {
+      key: 'role',
+      title: '角色',
+      render: (row) => (
+        <span className={row.role === 'user' ? 'text-primary-600' : 'text-neutral-500'}>
+          {row.role === 'user' ? '用户' : '助手'}
+        </span>
+      ),
     },
     {
       key: 'created_at',
@@ -98,16 +103,9 @@ export default function ConversationsPage() {
       key: '_action',
       title: '操作',
       render: (row) => (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            navigate(`/admin/users/${row.user_id}`);
-          }}
-          className="text-primary-600 hover:underline"
-        >
-          查看用户
-        </button>
+        <span className="font-mono text-xs text-neutral-400">
+          {row.session_id ? shortId(row.session_id) : '-'}
+        </span>
       ),
     },
   ];

@@ -36,3 +36,7 @@ SERVICE_NAME="emotion-api"
 
 # Node 监听端口（只在 127.0.0.1 上）
 NODE_PORT="3000"
+
+# ---- Admin API ----
+ADMIN_SERVICE_NAME="emotion-admin-api"
+ADMIN_PORT="3001"

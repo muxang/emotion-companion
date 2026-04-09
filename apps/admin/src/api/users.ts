@@ -1,89 +1,98 @@
-import { adminRequest } from './client';
+import { adminRequest, adminPaginatedRequest, type PaginatedResult } from './client';
 
+/** 后端 GET /admin/users 返回的用户行 */
 export interface AdminUserItem {
   id: string;
   anonymous_id: string;
   created_at: string;
   last_active_at: string | null;
-  session_count: number;
-  message_count: number;
+  total_sessions: number;
+  total_messages: number;
   memory_enabled: boolean;
-  has_recovery_plan: boolean;
+  tone_preference: string;
+  has_active_plan: boolean;
 }
 
-export interface AdminUserListResponse {
-  items: AdminUserItem[];
-  total: number;
-  page: number;
-  page_size: number;
-}
+export type AdminUserListResponse = PaginatedResult<AdminUserItem>;
 
 export function fetchUsers(params: {
-  q?: string;
+  search?: string;
   page?: number;
-  page_size?: number;
+  limit?: number;
 }): Promise<AdminUserListResponse> {
-  return adminRequest<AdminUserListResponse>('/admin/users', { query: params });
+  return adminPaginatedRequest<AdminUserItem>('/admin/users', { query: params });
 }
 
-export interface RelationshipEntity {
-  id: string;
-  label: string;
-  relation_type: string;
-}
-
+/** 后端 GET /admin/users/:id 的 data 结构 */
 export interface AdminUserDetail {
   user: {
     id: string;
     anonymous_id: string;
-    created_at: string;
-    last_active_at: string | null;
+    email: string | null;
+    nickname: string | null;
+    tone_preference: string;
     memory_enabled: boolean;
-    tone_preference: string | null;
+    created_at: string;
+    updated_at: string;
   };
   stats: {
-    session_count: number;
-    message_count: number;
-    active_days: number;
-    main_emotion: string | null;
+    total_sessions: number;
+    total_messages: number;
+    avg_risk_level: string | null;
+    dominant_emotion: string | null;
+    days_active: number;
   };
-  emotion_trend: Array<{ date: string; score: number }>;
-  relationship_entities: RelationshipEntity[];
-  recovery_plan: {
-    id: string;
-    plan_type: string;
-    progress: number;
-    status: string;
-    started_at: string;
-  } | null;
-  sessions: Array<{
+  recent_sessions: Array<{
     id: string;
     title: string | null;
     message_count: number;
     created_at: string;
     last_message_at: string | null;
   }>;
+  active_plan: {
+    id: string;
+    plan_type: string;
+    current_day: number;
+    total_days: number;
+    status: string;
+    started_at: string;
+  } | null;
+  relationship_entities: Array<{
+    id: string;
+    label: string;
+    relation_type: string | null;
+  }>;
+  emotion_trend: {
+    daily: Array<{ date: string; avg_score: number | null }>;
+  };
 }
 
 export function fetchUserDetail(id: string): Promise<AdminUserDetail> {
   return adminRequest<AdminUserDetail>(`/admin/users/${id}`);
 }
 
+/** 后端 GET /admin/users/:id/sessions/:sessionId 的 data.messages 元素 */
 export interface AdminMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   created_at: string;
   risk_level: 'low' | 'medium' | 'high' | 'critical' | null;
-  emotion_state: string | null;
-  next_mode: string | null;
+  intake_result: Record<string, unknown> | null;
+  structured_json: Record<string, unknown> | null;
+}
+
+/** 后端返回 { session, messages }，messages 是数组 */
+export interface SessionDetailData {
+  session: Record<string, unknown>;
+  messages: AdminMessage[];
 }
 
 export function fetchSessionMessages(
   userId: string,
   sessionId: string
-): Promise<AdminMessage[]> {
-  return adminRequest<AdminMessage[]>(
-    `/admin/users/${userId}/sessions/${sessionId}/messages`
+): Promise<SessionDetailData> {
+  return adminRequest<SessionDetailData>(
+    `/admin/users/${userId}/sessions/${sessionId}`
   );
 }

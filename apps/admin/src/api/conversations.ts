@@ -1,22 +1,19 @@
-import { adminRequest } from './client';
+import { adminPaginatedRequest, type PaginatedResult } from './client';
 
+/** 后端 GET /admin/conversations 返回的消息行 */
 export interface ConversationItem {
   id: string;
-  user_id: string;
+  session_id: string;
   anonymous_id: string;
-  content_preview: string;
-  risk_level: 'low' | 'medium' | 'high' | 'critical';
-  conversation_mode: string;
-  emotion_state: string | null;
+  role: string;
+  content: string;
+  risk_level: 'low' | 'medium' | 'high' | 'critical' | null;
+  intake_result: Record<string, unknown> | null;
+  structured_json: Record<string, unknown> | null;
   created_at: string;
 }
 
-export interface ConversationListResponse {
-  items: ConversationItem[];
-  total: number;
-  page: number;
-  page_size: number;
-}
+export type ConversationListResponse = PaginatedResult<ConversationItem>;
 
 export function fetchConversations(params: {
   risk_level?: string;
@@ -24,9 +21,9 @@ export function fetchConversations(params: {
   date_from?: string;
   date_to?: string;
   page?: number;
-  page_size?: number;
+  limit?: number;
 }): Promise<ConversationListResponse> {
-  return adminRequest<ConversationListResponse>('/admin/conversations', {
+  return adminPaginatedRequest<ConversationItem>('/admin/conversations', {
     query: params,
   });
 }

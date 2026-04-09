@@ -1,0 +1,26 @@
+[Unit]
+Description=Emotion Companion Admin API
+After=network.target
+
+[Service]
+Type=simple
+User=__APP_USER__
+WorkingDirectory=__APP_DIR__/apps/admin-api
+ExecStart=/usr/bin/node --import tsx --env-file=__APP_DIR__/apps/admin-api/.env __APP_DIR__/apps/admin-api/src/index.ts
+Restart=on-failure
+RestartSec=3
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=__ADMIN_SERVICE_NAME__
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=__APP_DIR__
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -18,11 +18,13 @@ interface TableProps<T> {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default function Table<T extends Record<string, any>>({
   columns,
-  data,
+  data: rawData,
   rowKey,
   onRowClick,
   highlightRow,
 }: TableProps<T>) {
+  // Admin API 未就绪 / 返回空结构时 data 可能是 undefined，兜底为空数组
+  const data = rawData ?? ([] as T[]);
   return (
     <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
       <table className="w-full text-sm">

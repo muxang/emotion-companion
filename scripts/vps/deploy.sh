@@ -69,17 +69,24 @@ log "Step 2/5: pnpm install --frozen-lockfile"
 pnpm install --frozen-lockfile
 
 # ---------- Step 3: typecheck (生产用 tsx 直接跑 .ts,无需单独 build) ----------
-log "Step 3/5: typecheck"
-if pnpm --filter @emotion/api run typecheck >/dev/null 2>&1; then
-  ok "  typecheck 通过"
-else
-  err "  typecheck 有报错,先在本地修好再 push"
-  pnpm --filter @emotion/api run typecheck || true
+log "Step 3/6: typecheck (api + admin-api)"
+TYPECHECK_OK=true
+for pkg in "@emotion/api" "@emotion/admin-api"; do
+  if pnpm --filter "${pkg}" run typecheck >/dev/null 2>&1; then
+    ok "  ${pkg} typecheck 通过"
+  else
+    err "  ${pkg} typecheck 有报错"
+    pnpm --filter "${pkg}" run typecheck || true
+    TYPECHECK_OK=false
+  fi
+done
+if [[ "${TYPECHECK_OK}" != "true" ]]; then
+  err "typecheck 有报错,先在本地修好再 push"
   exit 1
 fi
 
 # ---------- Step 4: db migrate ----------
-log "Step 4/5: db migrate（幂等）"
+log "Step 4/6: db migrate（幂等）"
 if pnpm --filter @emotion/api run db:migrate; then
   ok "  迁移完成"
 else
@@ -87,29 +94,56 @@ else
   exit 1
 fi
 
-# ---------- Step 5: restart service + 健康检查 ----------
-log "Step 5/5: 重启 ${SERVICE_NAME}"
+# ---------- Step 5: 重启主 API ----------
+log "Step 5/6: 重启 ${SERVICE_NAME}"
 sudo systemctl restart "${SERVICE_NAME}"
 
-# 等服务起来
 for i in 1 2 3 4 5; do
   sleep 1
   if curl -fsS "http://127.0.0.1:${NODE_PORT}/api/health" >/dev/null 2>&1; then
     break
   fi
   if [[ $i -eq 5 ]]; then
-    err "服务未在 5 秒内响应 /api/health"
+    err "主 API 未在 5 秒内响应 /api/health"
     err "查看日志：sudo journalctl -u ${SERVICE_NAME} -n 100 --no-pager"
     exit 1
   fi
 done
 
+# ---------- Step 6: 重启 Admin API ----------
+ADMIN_SERVICE_NAME="${ADMIN_SERVICE_NAME:-emotion-admin-api}"
+ADMIN_PORT="${ADMIN_PORT:-3001}"
+
+if systemctl is-enabled --quiet "${ADMIN_SERVICE_NAME}" 2>/dev/null; then
+  log "Step 6/6: 重启 ${ADMIN_SERVICE_NAME}"
+  sudo systemctl restart "${ADMIN_SERVICE_NAME}"
+
+  for i in 1 2 3 4 5; do
+    sleep 1
+    if curl -fsS "http://127.0.0.1:${ADMIN_PORT}/admin/health" >/dev/null 2>&1; then
+      break
+    fi
+    if [[ $i -eq 5 ]]; then
+      err "Admin API 未在 5 秒内响应 /admin/health"
+      err "查看日志：sudo journalctl -u ${ADMIN_SERVICE_NAME} -n 100 --no-pager"
+      # 不 exit：admin-api 挂了不影响主 API
+    fi
+  done
+  ADMIN_HEALTH="$(curl -fsS "http://127.0.0.1:${ADMIN_PORT}/admin/health" 2>/dev/null || echo '(无响应)')"
+else
+  log "Step 6/6: ${ADMIN_SERVICE_NAME} 未安装，跳过"
+  ADMIN_HEALTH="(未安装)"
+fi
+
 HEALTH="$(curl -fsS "http://127.0.0.1:${NODE_PORT}/api/health" || true)"
 echo
 ok "==============================================================="
 ok " 部署完成 ✅  ($(date '+%Y-%m-%d %H:%M:%S'))"
-ok " commit  : $(git rev-parse --short HEAD) - $(git log -1 --pretty=%s)"
-ok " health  : ${HEALTH}"
+ok " commit      : $(git rev-parse --short HEAD) - $(git log -1 --pretty=%s)"
+ok " api health  : ${HEALTH}"
+ok " admin health: ${ADMIN_HEALTH}"
 ok ""
-ok " 实时日志：sudo journalctl -u ${SERVICE_NAME} -f"
+ok " 实时日志："
+ok "   sudo journalctl -u ${SERVICE_NAME} -f"
+ok "   sudo journalctl -u ${ADMIN_SERVICE_NAME} -f"
 ok "==============================================================="

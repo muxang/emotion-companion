@@ -1,11 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchOverview, type OverviewData } from '../../api/overview';
 import StatCard from '../../components/ui/StatCard';
-import LineChart from '../../components/charts/LineChart';
-import PieChart from '../../components/charts/PieChart';
-import BarChart from '../../components/charts/BarChart';
-import Badge from '../../components/ui/Badge';
-import { formatPercent, diffPercent } from '../../utils/format';
 
 export default function OverviewPage() {
   const [data, setData] = useState<OverviewData | null>(null);
@@ -25,88 +20,114 @@ export default function OverviewPage() {
     return <p className="py-20 text-center text-neutral-400">加载中...</p>;
   }
 
-  const { stats, message_trend, mode_share, emotion_share, safety_share } = data;
+  // 后端返回 { users, conversations, modes, emotions, safety_triggers }
+  const { users, conversations, modes, emotions, safety_triggers } = data;
 
-  const msgDiff = diffPercent(stats.messages_today, stats.messages_yesterday);
-  const msgChangeStr =
-    msgDiff === 0
-      ? '与昨日持平'
-      : `较昨日 ${msgDiff > 0 ? '+' : ''}${(msgDiff * 100).toFixed(1)}%`;
+  if (!users) {
+    return (
+      <p className="py-20 text-center text-neutral-400">
+        数据加载异常，请检查 Admin API 是否正常运行
+      </p>
+    );
+  }
 
   return (
     <div className="space-y-6">
       <h2 className="text-lg font-bold text-neutral-800">数据概览</h2>
 
-      {/* top stat cards */}
-      <div className="grid grid-cols-4 gap-4">
+      {/* 顶部指标卡片 */}
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <StatCard
           label="总用户数"
-          value={stats.total_users}
-          change={`今日新增 +${stats.new_users_today}`}
+          value={users.total}
+          change={`今日新增 +${users.today}`}
           changeType="positive"
         />
         <StatCard
           label="今日消息数"
-          value={stats.messages_today}
-          change={msgChangeStr}
-          changeType={msgDiff >= 0 ? 'positive' : 'negative'}
-        />
-        <StatCard
-          label="Safety 触发率"
-          value={formatPercent(stats.safety_trigger_rate)}
+          value={conversations.today_messages}
+          change={`总消息 ${conversations.total_messages}`}
           changeType="neutral"
         />
         <StatCard
-          label="计划完成率"
-          value={formatPercent(stats.plan_completion_rate)}
+          label="Safety 触发"
+          value={safety_triggers.total}
+          change={safety_triggers.today > 0 ? `今日 ${safety_triggers.today}` : '今日无'}
+          changeType={safety_triggers.today > 0 ? 'negative' : 'neutral'}
+        />
+        <StatCard
+          label="总会话数"
+          value={conversations.total_sessions}
+          change={`人均 ${conversations.avg_messages_per_user} 条消息`}
           changeType="neutral"
         />
       </div>
 
-      {/* charts row 1 */}
+      {/* 对话模式分布 */}
       <div className="grid grid-cols-2 gap-4">
-        <LineChart
-          data={message_trend}
-          xKey="date"
-          yKey="count"
-          title="最近14天消息量"
-        />
-        <PieChart
-          data={mode_share.map((m) => ({ name: m.mode, value: m.count }))}
-          title="对话模式占比"
-        />
-      </div>
-
-      {/* charts row 2 */}
-      <div className="grid grid-cols-2 gap-4">
-        <BarChart
-          data={emotion_share}
-          xKey="emotion"
-          yKey="count"
-          title="情绪分布"
-          color="#8b5cf6"
-        />
         <div className="rounded-2xl border border-neutral-200 bg-white p-5">
           <h3 className="mb-4 text-sm font-medium text-neutral-600">
-            Safety 触发统计
+            对话模式分布
           </h3>
           <div className="space-y-3">
-            {safety_share.map((s) => (
+            {Object.entries(modes ?? {}).map(([mode, count]) => (
               <div
-                key={s.level}
+                key={mode}
                 className="flex items-center justify-between rounded-lg bg-neutral-50 px-4 py-3"
               >
-                <Badge value={s.level} variant="risk" />
-                <span className="text-xl font-bold text-neutral-700">
-                  {s.count}
+                <span className="text-sm text-neutral-600">{mode}</span>
+                <span className="text-lg font-bold text-neutral-700">
+                  {count}
                 </span>
-                {s.today_count !== undefined && s.today_count > 0 && (
-                  <span className="text-xs text-red-400">
-                    今日 {s.today_count}
-                  </span>
-                )}
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* 情绪分布 */}
+        <div className="rounded-2xl border border-neutral-200 bg-white p-5">
+          <h3 className="mb-4 text-sm font-medium text-neutral-600">
+            情绪分布
+          </h3>
+          <div className="space-y-3">
+            {Object.entries(emotions ?? {}).map(([emotion, count]) => (
+              <div
+                key={emotion}
+                className="flex items-center justify-between rounded-lg bg-neutral-50 px-4 py-3"
+              >
+                <span className="text-sm text-neutral-600">{emotion}</span>
+                <span className="text-lg font-bold text-neutral-700">
+                  {count}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Safety 触发详情 */}
+      <div className="rounded-2xl border border-neutral-200 bg-white p-5">
+        <h3 className="mb-4 text-sm font-medium text-neutral-600">
+          Safety 触发统计
+        </h3>
+        <div className="grid grid-cols-3 gap-4">
+          <div className="rounded-lg bg-amber-50 px-4 py-3 text-center">
+            <div className="text-2xl font-bold text-amber-600">
+              {safety_triggers.high}
+            </div>
+            <div className="mt-1 text-xs text-amber-500">High</div>
+          </div>
+          <div className="rounded-lg bg-red-50 px-4 py-3 text-center">
+            <div className="text-2xl font-bold text-red-600">
+              {safety_triggers.critical}
+            </div>
+            <div className="mt-1 text-xs text-red-500">Critical</div>
+          </div>
+          <div className="rounded-lg bg-neutral-50 px-4 py-3 text-center">
+            <div className="text-2xl font-bold text-neutral-700">
+              {safety_triggers.today}
+            </div>
+            <div className="mt-1 text-xs text-neutral-500">今日触发</div>
           </div>
         </div>
       </div>

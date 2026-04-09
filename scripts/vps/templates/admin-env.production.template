@@ -1,0 +1,24 @@
+# ============================================================
+# Production .env for emotion-companion Admin API
+# ============================================================
+# 这个文件由 setup.sh 拷贝到 apps/admin-api/.env
+# 与 apps/api/.env 共享同一个 DATABASE_URL
+# ============================================================
+
+NODE_ENV=production
+
+# ---------- 共享数据库 ----------
+DATABASE_URL=__FILL_ME__
+DATABASE_SSL=true
+
+# ---------- Admin 专用 ----------
+ADMIN_PORT=__ADMIN_PORT__
+ADMIN_HOST=127.0.0.1
+# 至少 32 位随机字符串（由 setup.sh / bootstrap.sh 自动生成）
+ADMIN_TOKEN=__ADMIN_TOKEN_PLACEHOLDER__
+# admin 前端的 Vercel 域名（含 https://，不带尾斜杠）
+ADMIN_CORS_ORIGIN=__ADMIN_CORS_ORIGIN_FILL_ME__
+LOG_LEVEL=info
+
+# 转发 health 检查给主 API
+API_BASE_URL=http://127.0.0.1:__NODE_PORT__

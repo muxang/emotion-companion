@@ -22,17 +22,16 @@ export default function SafetyPage() {
     (p: number) => {
       fetchSafetyEvents({
         page: p,
-        page_size: PAGE_SIZE,
-        risk_level: riskFilter === '全部' ? undefined : riskFilter,
-        date_from: dateFrom || undefined,
-        date_to: dateTo || undefined,
+        limit: PAGE_SIZE,
+        level: riskFilter === '全部' ? undefined : riskFilter,
       })
         .then((res) => {
           setItems(res.items);
           setTotal(res.total);
           setPage(res.page);
-          setTodayCount(res.summary.today_count);
-          setWeekCount(res.summary.week_count);
+          // 后端 /admin/safety 不返回 summary，用 total 代替
+          setTodayCount(0);
+          setWeekCount(res.total);
         })
         .catch(() => {});
     },
@@ -45,10 +44,12 @@ export default function SafetyPage() {
 
   const columns: Column<SafetyEvent>[] = [
     {
-      key: 'anonymous_id',
+      key: 'user_anonymous_id',
       title: '用户ID',
       render: (row) => (
-        <span className="font-mono text-xs">{shortId(row.anonymous_id)}</span>
+        <span className="font-mono text-xs">
+          {shortId(row.user_anonymous_id)}
+        </span>
       ),
     },
     {
