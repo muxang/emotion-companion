@@ -1,0 +1,9 @@
+process.env.NODE_ENV = 'test';
+process.env.ADMIN_PORT = '3099';
+process.env.ADMIN_HOST = '127.0.0.1';
+process.env.ADMIN_CORS_ORIGIN = 'http://localhost:5174';
+process.env.LOG_LEVEL = 'error';
+process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/test';
+process.env.DATABASE_SSL = 'false';
+process.env.ADMIN_TOKEN = 'aaaa-bbbb-cccc-dddd-aaaa-bbbb-cccc-dddd';
+process.env.API_BASE_URL = 'http://localhost:3000';
