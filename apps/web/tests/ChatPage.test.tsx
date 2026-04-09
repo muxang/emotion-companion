@@ -26,7 +26,7 @@ function renderPage(): void {
   );
 }
 
-describe('<ChatPage /> empty state quick topics', () => {
+describe('<ChatPage /> empty state feature hints', () => {
   beforeEach(() => {
     useAuthStore.setState({
       status: 'authed',
@@ -49,17 +49,21 @@ describe('<ChatPage /> empty state quick topics', () => {
     });
   });
 
-  it('shows empty state with quick topic buttons when no messages', () => {
+  it('shows empty state with 4 feature hint cards when no messages', () => {
     renderPage();
     expect(screen.getByText('今天想聊点什么?')).toBeInTheDocument();
-    expect(screen.getAllByTestId('quick-topic')).toHaveLength(3);
+    expect(screen.getByTestId('feature-hints')).toBeInTheDocument();
+    // 四个功能：随时倾诉 / 关系分析 / 恢复计划 / 话术建议
+    expect(screen.getByTestId('feature-hint-随时倾诉')).toBeInTheDocument();
+    expect(screen.getByTestId('feature-hint-关系分析')).toBeInTheDocument();
+    expect(screen.getByTestId('feature-hint-恢复计划')).toBeInTheDocument();
+    expect(screen.getByTestId('feature-hint-话术建议')).toBeInTheDocument();
   });
 
-  it('clicking a quick topic fills the input', () => {
+  it('clicking a feature hint card fills the input with its example', () => {
     renderPage();
-    const topics = screen.getAllByTestId('quick-topic');
-    fireEvent.click(topics[0]);
+    fireEvent.click(screen.getByTestId('feature-hint-关系分析'));
     const textarea = screen.getByLabelText('输入消息') as HTMLTextAreaElement;
-    expect(textarea.value).toBe(topics[0].textContent ?? '');
+    expect(textarea.value).toBe('帮我分析一下这段关系');
   });
 });

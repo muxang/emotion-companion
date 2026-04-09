@@ -7,11 +7,55 @@ import { MessageList } from '../../components/chat/MessageList.js';
 import { ChatInput } from '../../components/chat/ChatInput.js';
 import { truncate } from '../../utils/time.js';
 
-const QUICK_TOPICS: string[] = [
-  '最近感情上有些困惑,想聊聊...',
-  '帮我分析一下这段关系',
-  '我想开始一个恢复计划',
+/**
+ * 空状态功能引导卡片：2x2 网格，让用户一眼看到可以做的四件事
+ * + 各自的示例触发语句。点击 → 把 example 填入输入框 + 自动聚焦
+ * （聚焦由 ChatInput 内部检测 value '' → 非空 边沿触发完成）。
+ */
+const FEATURE_HINTS: ReadonlyArray<{
+  icon: string;
+  title: string;
+  desc: string;
+  example: string;
+}> = [
+  {
+    icon: '💬',
+    title: '随时倾诉',
+    desc: '直接说出你的困惑，我来接住',
+    example: '他最近对我忽冷忽热...',
+  },
+  {
+    icon: '🔍',
+    title: '关系分析',
+    desc: '告诉我情况，帮你看清',
+    example: '帮我分析一下这段关系',
+  },
+  {
+    icon: '📅',
+    title: '恢复计划',
+    desc: '7天或14天，陪你走出来',
+    example: '我想开始一个恢复计划',
+  },
+  {
+    icon: '✍️',
+    title: '话术建议',
+    desc: '不知道怎么说，我帮你写',
+    example: '帮我写条消息给他',
+  },
 ];
+
+/**
+ * 侧栏底部「功能速查」折叠面板里的关键词 → 功能映射，
+ * 让用户记住"说什么会触发什么"。
+ */
+const SIDEBAR_HELP_TIPS: ReadonlyArray<{ trigger: string; result: string }> = [
+  { trigger: '说"帮我分析"', result: '关系分析' },
+  { trigger: '说"开始计划"', result: '恢复计划' },
+  { trigger: '说"帮我写"', result: '话术建议' },
+  { trigger: '说"今天打卡"', result: '记录进度' },
+];
+
+const HINT_BANNER_KEY = 'hint_dismissed';
 
 export function ChatPage(): JSX.Element {
   const authStatus = useAuthStore((s) => s.status);
@@ -42,6 +86,30 @@ export function ChatPage(): JSX.Element {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState<string>('');
+  // 侧栏底部"功能速查"折叠状态
+  const [sidebarHelpOpen, setSidebarHelpOpen] = useState(false);
+  // 首次使用引导提示条：依据 localStorage 决定是否显示
+  // 初始 false，挂载后从 localStorage 读真实值，避免 SSR/首屏闪烁
+  const [showHintBanner, setShowHintBanner] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(HINT_BANNER_KEY) !== '1') {
+        setShowHintBanner(true);
+      }
+    } catch {
+      // localStorage 不可用（隐私模式等）→ 默认不显示，不影响主流程
+    }
+  }, []);
+
+  const dismissHintBanner = (): void => {
+    setShowHintBanner(false);
+    try {
+      localStorage.setItem(HINT_BANNER_KEY, '1');
+    } catch {
+      /* 同上 */
+    }
+  };
 
   useEffect(() => {
     if (authStatus === 'authed') {
@@ -99,8 +167,9 @@ export function ChatPage(): JSX.Element {
     setSidebarOpen(false);
   };
 
-  const handleQuickTopic = (topic: string): void => {
-    setInputValue(topic);
+  const handleFeatureHintClick = (example: string): void => {
+    // 把示例填入输入框；ChatInput 内部会检测 '' → 非空 边沿，自动聚焦
+    setInputValue(example);
   };
 
   const handleStartRename = (id: string, currentTitle: string): void => {
@@ -241,28 +310,63 @@ export function ChatPage(): JSX.Element {
           </li>
         ) : null}
       </ul>
+
+      {/* 侧栏底部「功能速查」折叠面板：mt-auto 把它推到 sidebar 最底部 */}
+      <div className="mt-auto border-t border-neutral-200 px-3 pb-2 pt-3">
+        <button
+          type="button"
+          onClick={() => setSidebarHelpOpen((v) => !v)}
+          className="text-[12px] text-neutral-400 hover:text-primary-500"
+          data-testid="sidebar-help-toggle"
+        >
+          💡 功能速查
+        </button>
+        {sidebarHelpOpen ? (
+          <div
+            className="mt-2 rounded-xl border border-neutral-100 bg-neutral-50 p-3 text-[12px] leading-loose text-neutral-400"
+            data-testid="sidebar-help-list"
+          >
+            {SIDEBAR_HELP_TIPS.map((tip) => (
+              <div key={tip.trigger}>
+                {tip.trigger} → {tip.result}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
     </>
   );
 
   const emptyState = (
-    <div className="flex w-full max-w-md flex-col items-center px-6 text-center">
+    <div className="flex h-full min-h-[60vh] w-full flex-col items-center justify-center px-6 text-center">
       <h2 className="text-lg font-medium text-neutral-800">今天想聊点什么?</h2>
-      <p className="mt-2 text-xs text-neutral-400">
-        点下面的话题快速开始,也可以直接输入。
-      </p>
-      <p className="mt-2 text-center text-[13px] text-neutral-400">
+      <p className="mt-2 text-[13px] text-neutral-400">
         直接告诉我你的情况,我来判断怎么帮你
       </p>
-      <div className="mt-6 flex w-full flex-col gap-2">
-        {QUICK_TOPICS.map((topic) => (
+
+      {/* 2x2 功能引导卡片：让用户一眼看到可以做的四件事 */}
+      <div
+        className="mx-auto mb-4 mt-6 grid w-full max-w-lg grid-cols-2 gap-3"
+        data-testid="feature-hints"
+      >
+        {FEATURE_HINTS.map((hint) => (
           <button
-            key={topic}
+            key={hint.title}
             type="button"
-            data-testid="quick-topic"
-            className="rounded-xl border border-primary-200 bg-white px-4 py-3 text-left text-[14px] text-primary-600 shadow-sm hover:bg-primary-50"
-            onClick={() => handleQuickTopic(topic)}
+            data-testid={`feature-hint-${hint.title}`}
+            onClick={() => handleFeatureHintClick(hint.example)}
+            className="cursor-pointer rounded-2xl border border-neutral-200 bg-white/60 p-3 text-left transition-all hover:border-primary-300 hover:bg-primary-50/50"
           >
-            {topic}
+            <div className="mb-1 text-xl">{hint.icon}</div>
+            <div className="text-[13px] font-medium text-neutral-600">
+              {hint.title}
+            </div>
+            <div className="mt-0.5 text-[12px] leading-snug text-neutral-500">
+              {hint.desc}
+            </div>
+            <div className="mt-1.5 text-[11px] text-primary-500">
+              示例：{hint.example}
+            </div>
           </button>
         ))}
       </div>
@@ -342,6 +446,25 @@ export function ChatPage(): JSX.Element {
             </button>
           </div>
         </header>
+        {/* 首次使用引导提示条：dismiss 后写 localStorage，永不再现 */}
+        {showHintBanner ? (
+          <div
+            className="flex items-center justify-between border-b border-primary-100 bg-primary-50 px-4 py-2 text-[13px] text-primary-600"
+            data-testid="first-use-hint-banner"
+          >
+            <span className="pr-3">
+              💡 直接告诉我你的情况,我会自动判断怎么帮你—分析关系、制定计划、写消息都可以
+            </span>
+            <button
+              type="button"
+              onClick={dismissHintBanner}
+              aria-label="关闭引导提示"
+              className="shrink-0 cursor-pointer px-2 text-lg leading-none text-primary-400 hover:text-primary-600"
+            >
+              ×
+            </button>
+          </div>
+        ) : null}
         <div className="flex-1 overflow-y-auto">
           <MessageList
             messages={messages}

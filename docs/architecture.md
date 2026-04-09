@@ -1,6 +1,6 @@
 # Emotion Companion · 系统架构总览
 
-> 最后更新：2026-04-08（Phase 7 部署完成 + 多 Provider 支持）
+> 最后更新：2026-04-09（Phase 7+ 维护期：智能融合层 ActionCard 持久化 + 详细架构图集）
 >
 > 本文档面向**开发者 / 运维 / 接手维护的人**，目标是让任何人在 30 分钟内掌握这个项目的全貌、可以独立排查线上问题、可以独立做小幅迭代。
 >
@@ -12,7 +12,14 @@
 
 1. [产品定位与边界](#一产品定位与边界)
 2. [技术栈](#二技术栈)
-3. [部署拓扑](#三部署拓扑)
+3. [系统架构与部署拓扑](#三系统架构与部署拓扑)
+   - 3.1 [部署拓扑（物理视图）](#31-部署拓扑物理视图)
+   - 3.2 [后端进程内部架构](#32-后端进程内部架构)
+   - 3.3 [Monorepo 包依赖关系](#33-monorepo-包依赖关系)
+   - 3.4 [请求生命周期：POST /api/chat/stream](#34-请求生命周期post-apichatstream)
+   - 3.5 [智能融合层 ActionCard 数据流](#35-智能融合层-actioncard-数据流)
+   - 3.6 [数据库 ER 简图](#36-数据库-er-简图)
+   - 3.7 [Orchestrator 决策状态机](#37-orchestrator-决策状态机)
 4. [Monorepo 目录结构](#四monorepo-目录结构)
 5. [数据库 Schema](#五数据库-schema)
 6. [API 接口清单](#六api-接口清单)
@@ -87,61 +94,718 @@
 
 ---
 
-## 三、部署拓扑
+## 三、系统架构与部署拓扑
+
+本章用 7 张图把整个项目的物理拓扑、进程内部结构、包依赖、单次请求生命周期、智能融合层数据流、数据库关系、编排状态机讲清楚。**对架构有疑问时，先在这里找答案，再去看代码**。
+
+### 3.1 部署拓扑（物理视图）
+
+四层视角：客户端 / 边缘 / 应用 / 数据 + 外部 AI Provider。
 
 ```
-                         用户浏览器
-                              │
-              ┌───────────────┴───────────────┐
-              │                               │
-              ▼                               ▼
-      Vercel CDN（全球边缘）            api.botjive.net
-      前端静态文件                       (腾讯云 VPS Ubuntu)
-      *.vercel.app                            │
-              │                       ┌───────┴────────┐
-              │                       │  Cloudflare    │
-              │                       │  DNS-only 灰云  │
-              │                       └───────┬────────┘
-              │                               │
-              │                       ┌───────▼────────┐
-              │                       │  Nginx 443     │
-              │                       │  (Let's Encrypt│
-              │                       │   + SSE 优化)  │
-              │                       └───────┬────────┘
-              │                               │ 127.0.0.1:3000
-              │                       ┌───────▼────────┐
-              │                       │ Node 20 + tsx  │
-              │                       │ Fastify        │
-              │                       │ systemd 守护    │
-              │                       └─┬──────┬───────┘
-              │                         │      │
-              │                         ▼      ▼
-              │                  Supabase   Upstash Redis
-              │                  (Postgres) (限流/会话缓存)
-              │                         ▲
-              │                         │
-              └──── AI 调用 ────────────┼─────────► AI Provider（由 AI_PROVIDER 决定）
-                                        │           默认：api.anthropic.com / Claude Sonnet 4
-                                        │           可选：DeepSeek / 通义千问 / 智谱 / 自定义中转
-                                        │
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              客户端层 (Client)                                │
+│                                                                              │
+│      ┌────────────────────┐               ┌────────────────────┐             │
+│      │  浏览器 (Chrome /  │               │  浏览器移动端       │             │
+│      │  Safari / Firefox) │               │  (iOS / Android)   │             │
+│      └─────────┬──────────┘               └─────────┬──────────┘             │
+│                │   localStorage:                    │                        │
+│                │     emotion.anonymous_id           │                        │
+│                │     emotion.token (JWT)            │                        │
+└────────────────┼─────────────────────────────────────┼───────────────────────┘
+                 │                                     │
+                 │  HTTPS  ┌──────────────────────┐    │  HTTPS
+                 │ (静态)  │ 请求路由              │    │ (API)
+                 ▼         │  - 静态资源 → Vercel  │    ▼
+┌─────────────────────────┐│  - /api/* → VPS      │┌─────────────────────────┐
+│       边缘层 (Edge)      ││ (前端 fetch 直接走  ││      边缘层 (Edge)       │
+│                          ││  api.botjive.net)    ││                          │
+│  ┌────────────────────┐  │└──────────────────────┘│  ┌────────────────────┐  │
+│  │  Vercel Global CDN │  │                        │  │ Cloudflare DNS     │  │
+│  │  apps/web 静态构建 │  │                        │  │ (grey cloud / DNS) │  │
+│  │  *.vercel.app +    │  │                        │  │ A 记录:            │  │
+│  │  自定义域名        │  │                        │  │ api.botjive.net    │  │
+│  └────────────────────┘  │                        │  │  → VPS IPv4         │  │
+│                          │                        │  └─────────┬──────────┘  │
+└──────────────────────────┘                        └────────────┼─────────────┘
+                                                                  │ TCP/443
+                                                                  ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          应用层 (App, 腾讯云 VPS Ubuntu 22.04)                │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │ Nginx 1.22  (TLS termination + 反代 + SSE 优化)                          │ │
+│  │   - HTTPS 443 (Let's Encrypt, certbot 自动续期)                          │ │
+│  │   - location /api/ → http://127.0.0.1:3000                              │ │
+│  │   - SSE 路径关闭 buffering: proxy_buffering off; proxy_read_timeout 600s│ │
+│  │   - access.log / error.log → /var/log/nginx/                            │ │
+│  └────────────────────────────────────┬───────────────────────────────────┘ │
+│                                       │ 127.0.0.1:3000                       │
+│  ┌────────────────────────────────────▼───────────────────────────────────┐ │
+│  │ systemd unit: emotion-api.service                                       │ │
+│  │   ExecStart=node --import tsx apps/api/src/index.ts                     │ │
+│  │   Restart=on-failure  RestartSec=5                                      │ │
+│  │   User=emotion        WorkingDirectory=/home/emotion/emotion            │ │
+│  │   ┌─────────────────────────────────────────────────────────────────┐  │ │
+│  │   │ Node 20 + tsx loader  →  Fastify 4 (HTTP/1.1)                    │  │ │
+│  │   │   plugins:    @fastify/cors, @fastify/jwt, @fastify/rate-limit  │  │ │
+│  │   │   middleware: requireAuth (JWT 校验 + 用户挂载)                   │  │ │
+│  │   │   routes:     auth / sessions / chat-stream(SSE) / analysis /    │  │ │
+│  │   │               recovery / memory / settings / health               │  │ │
+│  │   │   依赖注入:   AIClient + Repos + Memory + Tracker + Logger        │  │ │
+│  │   └─────────────────────────────────────────────────────────────────┘  │ │
+│  └─────┬──────────────────────────────────────────────────────────┬───────┘ │
+└────────┼──────────────────────────────────────────────────────────┼─────────┘
+         │ TLS                                                       │ TLS
+         │                                                           │
+         ▼                                                           ▼
+┌─────────────────────────┐                          ┌─────────────────────────┐
+│       数据层 (Data)      │                          │      外部 AI Provider     │
+│                          │                          │                          │
+│  ┌────────────────────┐  │                          │  由 AI_PROVIDER 决定:    │
+│  │ Supabase Postgres  │  │                          │                          │
+│  │ 15.x 云托管         │  │                          │  ┌──────────────────┐   │
+│  │ ────────────────── │  │                          │  │ anthropic (默认) │   │
+│  │ users / sessions   │  │                          │  │ api.anthropic.com│   │
+│  │ messages           │  │                          │  │ Claude Sonnet 4  │   │
+│  │ user_profiles      │  │                          │  └──────────────────┘   │
+│  │ relationship_*     │  │                          │  ┌──────────────────┐   │
+│  │ memory_summaries   │  │                          │  │ openai-compat:   │   │
+│  │ recovery_plans     │  │                          │  │  - openai        │   │
+│  │ recovery_checkins  │  │                          │  │  - deepseek      │   │
+│  │ analytics_events   │  │                          │  │  - qwen (通义)   │   │
+│  └────────────────────┘  │                          │  │  - zhipu (智谱)  │   │
+│                          │                          │  │  - custom 中转   │   │
+│  ┌────────────────────┐  │                          │  └──────────────────┘   │
+│  │ Upstash Redis 7    │  │                          │                          │
+│  │ (可选, 云托管)     │  │                          │  失败 / 超时 → AIError   │
+│  │ ────────────────── │  │                          │  → orchestrator 走兜底    │
+│  │ rate-limit store   │  │                          │     文案，不抛到前端       │
+│  │ (不可用时降级为     │  │                          │                          │
+│  │  Node 内存 store)  │  │                          │                          │
+│  └────────────────────┘  │                          │                          │
+└─────────────────────────┘                          └─────────────────────────┘
 ```
 
-### 各组件分工
+**为什么这样分**：
+- **前端纯静态 → CDN 分发**：最便宜最快，全球边缘缓存，无需运维
+- **后端必须自己跑**：长连接 SSE + 数据库连接池 + AbortController 资源管理，serverless 不友好
+- **数据库托管**：备份、高可用、PITR 都由 Supabase 负责
+- **Cloudflare 仅用 DNS**：开 proxy（橙云）会破坏 SSE 长连接，所以保持 grey cloud
+- **多 AI Provider**：通过 `AI_PROVIDER` 切换，包依赖只到 `core-ai/factory.ts`，业务代码无感知
 
-| 组件 | 跑在哪 | 职责 |
-|---|---|---|
-| 前端 SPA | Vercel CDN | 用户界面、SSE 客户端、本地持久化（anonymous_id / token / settings 缓存） |
-| 后端 API | VPS Node 进程（systemd 守护） | 鉴权、会话 CRUD、对话编排、SSE 推流、记忆 / 恢复 / 设置接口 |
-| Postgres | Supabase 云端 | users / sessions / messages / memory_* / recovery_* / analytics_events |
-| Redis | Upstash 云端（可选） | 限流 store；不可用时降级为 Node 进程内存 |
-| AI Provider | 由 `AI_PROVIDER` 决定（默认 api.anthropic.com） | 模型推理；可切换为 DeepSeek / 通义千问 / 智谱 / 自定义中转 |
-| DNS | Cloudflare（grey cloud） | A 记录 `api.botjive.net` 指向 VPS IP |
+---
 
-### 为什么前后端分开
+### 3.2 后端进程内部架构
 
-- 前端纯静态 → CDN 分发最便宜最快
-- 后端长连接 SSE + 数据库连接池 → 必须自己机器
-- 数据库托管 → 自己不维护备份和高可用
+Node 进程启动到一次请求被处理的内部分层。
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                  Node 进程 (apps/api, tsx loader)                          │
+│                                                                            │
+│  index.ts                                                                  │
+│    │                                                                       │
+│    │ 1. config/env.ts  (Zod 校验所有环境变量)                                │
+│    │ 2. createAIClient(env)  →  packages/core-ai/factory                    │
+│    │ 3. getRedisClient(env)  →  apps/api/redis (可选)                       │
+│    │ 4. createMemoryService() / createTracker() / createSafetyClassifier() │
+│    │ 5. buildApp({ ai, redis, ...deps })                                   │
+│    │ 6. app.listen({ host: '0.0.0.0', port: env.PORT })                    │
+│    ▼                                                                       │
+│  ┌──────────────────────────────────────────────────────────────────┐    │
+│  │ buildApp() — apps/api/src/app.ts                                  │    │
+│  │                                                                    │    │
+│  │  注册顺序（重要）:                                                  │    │
+│  │   ① pino logger                                                    │    │
+│  │   ② @fastify/cors  ← 严格匹配 CORS_ORIGIN                          │    │
+│  │   ③ @fastify/jwt   ← 注册解码器，不强制 401                        │    │
+│  │   ④ @fastify/rate-limit ← 优先 redisStore，缺则内存 store          │    │
+│  │   ⑤ requireAuth decorator (req → user 挂载)                       │    │
+│  │   ⑥ 注入仓储 + AI + Memory + Tracker 到 fastify.decorate           │    │
+│  │   ⑦ routes: auth / sessions / chat-stream / analysis /            │    │
+│  │             recovery / memory / settings / health                  │    │
+│  │   ⑧ 全局 error handler (中文错误码 → JSON)                          │    │
+│  └────────────────────────────────┬─────────────────────────────────┘    │
+│                                    │                                       │
+│                                    │ HTTP 请求进入                          │
+│                                    ▼                                       │
+│  ┌─────────────────────────────────────────────────────────────────┐     │
+│  │ 路由层 (apps/api/src/routes/*)                                    │     │
+│  │   - 入参用 Zod schema 校验                                         │     │
+│  │   - requireAuth 中间件挂载 req.user                                │     │
+│  │   - 业务逻辑薄壳，重活全部委托给 orchestrator / services / repos    │     │
+│  └────────────────────────────────┬────────────────────────────────┘     │
+│                                    │                                       │
+│         ┌──────────────────────────┼──────────────────────────┐           │
+│         │                          │                          │           │
+│         ▼                          ▼                          ▼           │
+│  ┌──────────────┐         ┌──────────────────┐       ┌──────────────┐    │
+│  │ /chat/stream │         │ /analysis /       │       │ /sessions /  │    │
+│  │              │         │  recovery /       │       │  memory /    │    │
+│  │ orchestrator │         │  message-coach    │       │  settings /  │    │
+│  │ (核心)       │         │  (各自走专用 skill)│       │  health      │    │
+│  └──────┬───────┘         └────────┬─────────┘       └──────┬───────┘    │
+│         │                          │                         │            │
+│         └──────────────────────────┼─────────────────────────┘            │
+│                                    │                                       │
+│  ┌─────────────────────────────────▼─────────────────────────────────┐   │
+│  │ 业务能力层 (packages/*) — 全部纯函数 / 可独立测试                   │   │
+│  │                                                                     │   │
+│  │  ┌────────────┐ ┌────────────┐ ┌─────────────┐ ┌────────────────┐ │   │
+│  │  │ skills/    │ │ safety/    │ │ memory/     │ │ core-ai/       │ │   │
+│  │  │  emotion-  │ │  classifier│ │  short-term │ │  factory       │ │   │
+│  │  │  intake    │ │  ai-       │ │  long-term  │ │  providers/    │ │   │
+│  │  │  companion-│ │   classifier│ │  summarizer │ │   anthropic   │ │   │
+│  │  │  response  │ │  rules     │ │  timeline   │ │   openai-compat│ │   │
+│  │  │  tong-     │ │  triage    │ │             │ │  guard         │ │   │
+│  │  │  analysis  │ │  guard     │ │             │ │  stream        │ │   │
+│  │  │  message-  │ └─────┬──────┘ └──────┬──────┘ └────────┬───────┘ │   │
+│  │  │  coach     │       │               │                 │         │   │
+│  │  │  recovery- │       │               │                 │         │   │
+│  │  │  plan      │       │               │                 │         │   │
+│  │  │  safety-   │       │               │                 │         │   │
+│  │  │  triage    │       │               │                 │         │   │
+│  │  └─────┬──────┘       │               │                 │         │   │
+│  │        │              │               │                 │         │   │
+│  │        └──────────────┴───────┬───────┴─────────────────┘         │   │
+│  │                                │                                   │   │
+│  │                                ▼                                   │   │
+│  │                      ┌─────────────────┐                          │   │
+│  │                      │  shared/        │                          │   │
+│  │                      │  - types        │  ← 所有包都依赖           │   │
+│  │                      │  - schemas      │    无业务逻辑              │   │
+│  │                      │  - constants    │                          │   │
+│  │                      └─────────────────┘                          │   │
+│  └─────────────────────────────────┬─────────────────────────────────┘   │
+│                                    │                                       │
+│  ┌─────────────────────────────────▼─────────────────────────────────┐   │
+│  │ 基础设施层 (apps/api/src/db, redis)                                │   │
+│  │                                                                     │   │
+│  │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐ │   │
+│  │  │ pg.Pool 单例     │  │ ioredis 单例     │  │ pino logger      │ │   │
+│  │  │ + repositories/  │  │ + ready 等待     │  │ child logger     │ │   │
+│  │  │   users          │  │                  │  │ (按 reqId 隔离)  │ │   │
+│  │  │   sessions       │  │                  │  │                  │ │   │
+│  │  │   messages       │  │                  │  │                  │ │   │
+│  │  │   memory         │  │                  │  │                  │ │   │
+│  │  │   recovery       │  │                  │  │                  │ │   │
+│  │  └────────┬─────────┘  └────────┬─────────┘  └──────────────────┘ │   │
+│  └───────────┼─────────────────────┼─────────────────────────────────┘   │
+└──────────────┼─────────────────────┼───────────────────────────────────────┘
+               │                     │
+               ▼                     ▼
+        Supabase Postgres      Upstash Redis
+```
+
+**关键约束**：
+- 路由层只做参数校验和编排调用，不写业务规则
+- 业务能力层（packages/*）不依赖 fastify、不依赖 pg.Pool —— 只依赖 `core-ai` 和 `shared`，便于单元测试
+- `shared` 是 DAG 的根，不依赖任何其它包；任何业务逻辑都不能塞进 shared
+- 数据库访问只能通过 `apps/api/src/db/repositories/*`，业务包不直连 pg
+
+---
+
+### 3.3 Monorepo 包依赖关系
+
+包之间是严格的 DAG（不允许循环依赖），方向都是「下层不知道上层存在」。
+
+```
+                    ┌──────────────────┐
+                    │  apps/api        │  ← 唯一组装点
+                    │  (Fastify 后端)  │     依赖几乎所有 packages
+                    └────────┬─────────┘
+                             │
+            ┌────────────────┼─────────────────┐
+            │                │                 │
+            ▼                ▼                 ▼
+   ┌─────────────────┐ ┌──────────┐  ┌──────────────────┐
+   │  packages/      │ │ packages/│  │   packages/      │
+   │  skills/*       │ │ safety   │  │   memory         │
+   │  ┌────────────┐ │ │          │  │                  │
+   │  │ emotion-   │ │ └────┬─────┘  └────────┬─────────┘
+   │  │ intake     │ │      │                 │
+   │  │ companion- │ │      │                 │
+   │  │ response   │ │      │                 │
+   │  │ tong-      │ │      │                 │
+   │  │ analysis   │ │      │                 │
+   │  │ message-   │ │      │                 │
+   │  │ coach      │ │      │                 │
+   │  │ recovery-  │ │      │                 │
+   │  │ plan       │ │      │                 │
+   │  │ safety-    │ │      │                 │
+   │  │ triage     │ │      │                 │
+   │  └─────┬──────┘ │      │                 │
+   └────────┼────────┘      │                 │
+            │               │                 │
+            └───────────────┼─────────────────┤
+                            │                 │
+                            ▼                 │
+                  ┌──────────────────┐        │
+                  │ packages/        │        │
+                  │ core-ai          │◄───────┘
+                  │  - factory       │
+                  │  - providers/    │  AI Client 抽象 + Final Response Guard
+                  │  - guard         │
+                  │  - stream        │
+                  └────────┬─────────┘
+                           │
+                           ▼
+                  ┌──────────────────┐
+                  │ packages/        │
+                  │ shared           │  ← DAG 根，零业务逻辑
+                  │  - types         │     纯类型 + Zod schemas + 常量
+                  │  - schemas       │
+                  │  - constants     │
+                  └──────────────────┘
+                           ▲
+                           │ 仅类型
+                           │
+                  ┌────────┴─────────┐
+                  │  apps/web        │  ← 前端只 import shared 的类型
+                  │  (React SPA)     │     不 import 任何业务包
+                  └──────────────────┘
+```
+
+**禁止跨向依赖**：
+- ❌ `shared` 不能 import 任何业务包
+- ❌ 业务包之间不能互相 import（例如 `skills/companion-response` 不能 import `skills/tong-analysis`，要复用就抽到 `shared`）
+- ❌ `apps/web` 不能 import 任何包含 Node API 的包（如 `core-ai/providers/anthropic`），只能 import `shared` 的类型
+- ✅ `apps/api` 是唯一组装点，把所有业务包拼成完整应用
+
+---
+
+### 3.4 请求生命周期：POST /api/chat/stream
+
+一次完整的 SSE 流式对话请求，从浏览器发出到前端渲染完成的全部环节。
+
+```
+┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐  ┌──────────┐  ┌──────────┐
+│ 前端     │  │ Nginx    │  │ Fastify  │  │ Orchestrator     │  │ AI       │  │ Postgres │
+│ chatStore│  │ :443     │  │ :3000    │  │ + Skills + Guard │  │ Provider │  │          │
+└────┬─────┘  └────┬─────┘  └────┬─────┘  └────────┬─────────┘  └────┬─────┘  └────┬─────┘
+     │             │             │                  │                  │             │
+     │ POST /api/chat/stream                        │                  │             │
+     │ Bearer JWT                                                                     │
+     │ {session_id, content}                                                          │
+     ├────────────►│             │                  │                  │             │
+     │             │ proxy_pass                                                       │
+     │             ├────────────►│                  │                  │             │
+     │             │             │ requireAuth                                        │
+     │             │             │ Zod 校验 body                                      │
+     │             │             │ 取 session / 拉最近 6 条历史                       │
+     │             │             ├─────────────────────────────────────────────────►│
+     │             │             │                  │                  │             │
+     │             │             │ orchestrate(input, deps)                          │
+     │             │             ├─────────────────►│                  │             │
+     │             │             │                  │                                │
+     │             │             │ Step 1: emotion-intake (非流式 JSON)               │
+     │             │             │                  ├─────────────────►│             │
+     │             │             │                  │◄─────────────────┤             │
+     │             │             │                  │ IntakeResult                   │
+     │             │             │                  │                                │
+     │             │             │ Step 2-4: 风险计算 + 脆弱缓冲 → mode 决策          │
+     │             │             │                  │                                │
+     │             │ thinking 事件                  │                                │
+     │             │◄─────────────                  │                                │
+     │◄────────────┤             │                  │                                │
+     │ 前端显示「正在理解你说的话...」                                                  │
+     │             │             │                  │                                │
+     │             │             │ Step 5: 智能融合层                                 │
+     │             │             │                  │ readIntent(intake)            │
+     │             │             │                  │ → push pendingActions[]        │
+     │             │             │                  │   (analysis_result/coach_result│
+     │             │             │                  │    /plan_created/...)          │
+     │             │             │                  │                                │
+     │             │             │ Step 6: 模式路由 → 预运行 skill                    │
+     │             │             │                  │ analysis: runTongAnalysis     │
+     │             │             │                  │ coach:    runMessageCoach     │
+     │             │             │                  │ companion:companion stream    │
+     │             │             │                  ├─────────────────►│             │
+     │             │             │                  │   AI 调用 (4096 tokens)        │
+     │             │             │                  │◄─────────────────┤             │
+     │             │             │                  │   raw text                     │
+     │             │             │                  │                                │
+     │             │             │                  │ parser → AnalysisResult        │
+     │             │             │                  │ (失败则截断抢救 → 0.3 confidence)│
+     │             │             │                  │ 设 skipTextReplay=true        │
+     │             │             │                  │                                │
+     │             │ meta 事件                      │                                │
+     │             │◄─────────────                  │                                │
+     │◄────────────┤             │ {mode, risk_level}                                │
+     │             │             │                  │                                │
+     │             │             │ Step 7: 注入长期记忆 + active plan 状态            │
+     │             │             │                  ├─────────────────────────────►│
+     │             │             │                  │  getUserMemory                 │
+     │             │             │                  │◄─────────────────────────────┤
+     │             │             │                  │                                │
+     │             │             │ Step 8: 收集 skill 输出到 buffer                   │
+     │             │             │                  │ companion: collectStream       │
+     │             │             │                  │ analysis/coach: 复用预运行     │
+     │             │             │                  │                                │
+     │             │             │ Step 9: Final Response Guard                       │
+     │             │             │                  │ sanitizeForGuard 清洗          │
+     │             │             │                  │ 七项检查同步执行               │
+     │             │             │                  │   - no_absolute_promise        │
+     │             │             │                  │   - no_dependency_suggestion   │
+     │             │             │                  │   - no_verdict_as_analysis     │
+     │             │             │                  │   - has_actionable_suggestion  │
+     │             │             │                  │   - no_excessive_bonding       │
+     │             │             │                  │   - critical_has_real_help     │
+     │             │             │                  │   - no_dangerous_content       │
+     │             │             │                  │ 失败 → 重试 1 次                │
+     │             │             │                  │                                │
+     │             │             │ Step 10: sanitizeText (U+FFFD + 控制字符)          │
+     │             │             │                  │                                │
+     │             │             │ Step 11: 写 messages 表                             │
+     │             │             │                  │ user 消息 + assistant 消息     │
+     │             │             │                  │ skipTextReplay 时 content =    │
+     │             │             │                  │   '[关系分析结果见上方卡片]'   │
+     │             │             │                  │ structured_json 含 _actionCard │
+     │             │             │                  ├─────────────────────────────►│
+     │             │             │                  │◄─────────────────────────────┤
+     │             │             │                  │                                │
+     │             │             │ Step 12: yield action 事件 + 文字回放               │
+     │             │             │                  │                                │
+     │             │ action 事件 (analysis_result / coach_result / ...)               │
+     │             │◄─────────────                  │                                │
+     │◄────────────┤             │                                                   │
+     │ chatStore.onAction → ChatViewMessage.actionCard                                 │
+     │ ActionCardRenderer 立即渲染卡片                                                  │
+     │             │             │                                                   │
+     │             │             │ skipTextReplay=false:                              │
+     │             │             │   replayChunks(finalText) 切 2-6 字符               │
+     │             │ delta 事件 × N                                                    │
+     │             │◄─────────────                  │                                │
+     │◄────────────┤             │                                                   │
+     │ MessageBubble 流式追加文字                                                       │
+     │             │             │                                                   │
+     │             │             │ Step 13: fire-and-forget 异步                       │
+     │             │             │   generateSessionSummary (memory 启用 + risk<high) │
+     │             │             │   extractAndSaveEntities                           │
+     │             │             │                  ├─────────────────►│             │
+     │             │             │                                                    │
+     │             │ done 事件 {metadata}                                              │
+     │             │◄─────────────                  │                                │
+     │◄────────────┤             │                                                   │
+     │ chatStore.onDone → status='idle'                                                │
+     │ thinkingMessage = null                                                         │
+     │             │             │                                                   │
+     ▼             ▼             ▼                  ▼                  ▼             ▼
+```
+
+**关键时序保证**：
+- `meta` 事件总在 `delta` / `action` 之前（前端用它确定本轮模式与 risk）
+- `action` 事件总在 `delta` 之前 yield（前端先把卡片骨架渲染出来，再追加文字）
+- abort 时：user 消息一定写入，assistant 消息一定不写入
+- 异步任务（Step 13）失败仅 warn，不影响响应
+
+---
+
+### 3.5 智能融合层 ActionCard 数据流
+
+ActionCard 既要支持流式新建（实时推 SSE），又要支持刷新页面后从 DB 重建。两条路径必须严格一致，否则会出现"刷新前显示卡片、刷新后变成纯文字"的 bug。
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                            生成阶段（Backend）                              │
+│                                                                            │
+│   IntakeResult.intent                                                      │
+│        │                                                                   │
+│        ▼                                                                   │
+│   ┌─────────────────────────────────────────────────────────────────┐    │
+│   │ orchestrator/index.ts  Step 5 智能融合层                           │    │
+│   │                                                                    │    │
+│   │  intent === 'request_analysis'  →  mode='analysis' →  Step 6      │    │
+│   │  intent === 'message_coach'     →  mode='coach'    →  Step 6      │    │
+│   │  intent === 'create_plan'(明确)  →  createPlan + push 'plan_created'│    │
+│   │  intent === 'create_plan'(模糊)  →  push 'plan_options' + 引导文案 │    │
+│   │  intent === 'checkin'           →  completeCheckin + push         │    │
+│   │                                     'checkin_done' + 致意文案     │    │
+│   │                                                                    │    │
+│   │  pendingActions: PendingAction[] = [...]                          │    │
+│   └────────────────────────┬────────────────────────────────────────┘    │
+│                            │                                              │
+│        ┌───────────────────┴────────────────────┐                         │
+│        │                                        │                         │
+│        ▼                                        ▼                         │
+│   ┌─────────────────┐                    ┌─────────────────────────┐     │
+│   │ Step 12         │                    │ Step 11 持久化           │     │
+│   │ SSE yield       │                    │ messages.append({       │     │
+│   │  type='action'  │                    │   content: skipTextReplay│     │
+│   │  action_type    │                    │     ? '[占位符]'         │     │
+│   │  payload        │                    │     : finalText,         │     │
+│   │                 │                    │   structured_json: {    │     │
+│   │ 给前端流式新建   │                    │     ...baseStructured,  │     │
+│   │ 用的实时通道     │                    │     _actionCard: {      │     │
+│   │                 │                    │       action_type,      │     │
+│   │                 │                    │       payload           │     │
+│   │                 │                    │     }                   │     │
+│   │                 │                    │   }                     │     │
+│   │                 │                    │ })                      │     │
+│   └────────┬────────┘                    └──────────┬──────────────┘     │
+└────────────┼────────────────────────────────────────┼───────────────────┘
+             │                                        │
+             │ SSE 'action' event                     │
+             │                                        ▼
+             │                              ┌─────────────────────┐
+             │                              │ Postgres            │
+             │                              │ messages.           │
+             │                              │  structured_json    │
+             │                              │  ._actionCard       │
+             │                              └──────────┬──────────┘
+             │                                         │
+             │                                         │
+             │                          ┌──────────────┴──────────────┐
+             │                          │                             │
+             │                          │ GET /api/sessions/:id        │
+             │                          │ 加载历史消息                  │
+             │                          │ MessageDTO[]                 │
+             │                          │   (含 structured_json)       │
+             │                          │                             │
+             ▼                          ▼                             │
+┌──────────────────────────────────────────────────────────────────┐ │
+│                       前端 chatStore                               │ │
+│                                                                    │ │
+│  ┌─────────────────────┐         ┌─────────────────────────────┐ │ │
+│  │ 流式路径             │         │ Hydrate 路径                  │ │ │
+│  │                     │         │                              │ │ │
+│  │ onAction(type, p)   │         │ hydrateFromDb(sid, dtos)     │ │ │
+│  │  → 给当前 streaming  │         │  filtered = dtos.filter(    │ │ │
+│  │    的 assistantMsg  │         │    role ∈ {user,assistant}) │ │ │
+│  │    挂 actionCard    │         │  lastIndex = filtered.length-1│ │ │
+│  │  → 不设置           │         │  for (m, i) of filtered:    │ │ │
+│  │    isLastMessage    │         │    if m.role==='assistant'  │ │ │
+│  │    (默认 true)      │         │       && structured_json:   │ │ │
+│  │                     │         │       const raw = sj         │ │ │
+│  │                     │         │         ._actionCard         │ │ │
+│  │                     │         │       view.actionCard = {   │ │ │
+│  │                     │         │         id, action_type,     │ │ │
+│  │                     │         │         payload, createdAt, │ │ │
+│  │                     │         │         isLastMessage:       │ │ │
+│  │                     │         │           i === lastIndex   │ │ │
+│  │                     │         │       }                      │ │ │
+│  └──────────┬──────────┘         └──────────────┬──────────────┘ │ │
+│             │                                    │                │ │
+│             └──────────────┬─────────────────────┘                │ │
+│                            │                                       │ │
+│                            ▼                                       │ │
+│              ChatViewMessage.actionCard                            │ │
+│                            │                                       │ │
+└────────────────────────────┼───────────────────────────────────────┘ │
+                             │                                         │
+                             ▼                                         │
+              ┌──────────────────────────────┐                        │
+              │ MessageBubble                 │                        │
+              │   ↓                           │                        │
+              │ ActionCardRenderer            │                        │
+              │   switch (action_type) {      │                        │
+              │     'analysis_result' →       │                        │
+              │       <AnalysisResultCard>    │                        │
+              │     'coach_result' →          │                        │
+              │       <CoachResultCard>       │                        │
+              │     'plan_created' →          │                        │
+              │       <PlanCreatedCard>       │                        │
+              │     'plan_options' →          │                        │
+              │       <PlanOptionsCard        │                        │
+              │         isLastMessage={...}/> │                        │
+              │     'checkin_done' →          │                        │
+              │       <CheckinDoneCard>       │                        │
+              │   }                           │                        │
+              └──────────────────────────────┘                        │
+                                                                       │
+                              ◄────────────────────────────────────────┘
+                              页面刷新时走 hydrate 路径
+```
+
+**两条路径的差异**（容易踩的坑）：
+- **流式路径** 通过 SSE `onAction` 拿到卡片，`isLastMessage` 默认 true（用户刚选完计划就发消息）
+- **Hydrate 路径** 从 DB 拿到 `_actionCard`，按 `i === lastIndex` 写 `isLastMessage`，避免历史 plan_options 卡片让用户重复点击
+- 两条路径写出来的 `ChatViewMessage.actionCard` 形状必须一致，否则 ActionCardRenderer 会渲染崩掉
+
+---
+
+### 3.6 数据库 ER 简图
+
+只画核心表与外键，不展开字段。完整 schema 见 [§ 五、数据库 Schema](#五数据库-schema)。
+
+```
+                              ┌─────────────────┐
+                              │     users       │
+                              │  ─────────────  │
+                              │ id (PK)         │
+                              │ anonymous_id    │
+                              │ memory_enabled  │
+                              │ tone_preference │
+                              │ ...             │
+                              └────────┬────────┘
+                                       │ 1
+              ┌─────────────────┬──────┼──────┬─────────────────┬──────────────┐
+              │                 │      │      │                 │              │
+              │ N               │ N    │ N    │ N               │ N            │ N
+              ▼                 ▼      ▼      ▼                 ▼              ▼
+    ┌──────────────────┐ ┌──────────────┐ ┌────────────────┐ ┌─────────────┐ ┌─────────────┐
+    │    sessions      │ │ user_profile │ │ relationship_  │ │ memory_     │ │ recovery_   │
+    │ ─────────────── │ │ (1 对 1)     │ │ entities       │ │ summaries   │ │ plans       │
+    │ id (PK)         │ │ ──────────── │ │ ──────────────│ │ ────────── │ │ ──────────  │
+    │ user_id (FK)    │ │ traits_json  │ │ id (PK)        │ │ id (PK)     │ │ id (PK)     │
+    │ title           │ │ updated_at   │ │ user_id (FK)   │ │ user_id(FK) │ │ user_id(FK) │
+    │ message_count   │ └──────────────┘ │ label          │ │ session_id  │ │ plan_type   │
+    │ created_at      │                  │ relation_type  │ │  (FK)       │ │ current_day │
+    └────────┬─────────┘                  │ updated_at     │ │ summary_text│ │ status      │
+             │ 1                          └────────┬───────┘ └─────────────┘ │ created_at  │
+             │ N                                   │ 1                       └──────┬──────┘
+             ▼                                     │ N                              │ 1
+    ┌──────────────────┐                           ▼                                │ N
+    │    messages      │                  ┌────────────────┐                        ▼
+    │ ─────────────── │                  │ relationship_  │             ┌──────────────────┐
+    │ id (PK)         │                  │ events         │             │ recovery_        │
+    │ session_id (FK) │                  │ ─────────────  │             │ checkins         │
+    │ role            │                  │ id (PK)        │             │ ───────────────  │
+    │ content         │                  │ entity_id (FK) │             │ id (PK)          │
+    │ structured_json │ ←── _actionCard 在这里 │ event_type    │             │ plan_id (FK)     │
+    │ intake_result   │                  │ event_time     │             │ user_id (FK)     │
+    │ risk_level      │                  │ summary        │             │ day_index        │
+    │ created_at      │                  └────────────────┘             │ mood_score       │
+    └─────────────────┘                                                  │ reflection       │
+                                                                          │ created_at       │
+                                                                          └──────────────────┘
+
+    ┌──────────────────┐
+    │ analytics_events │
+    │ ───────────────  │
+    │ id (PK)          │  ← user_id 可空（匿名事件）
+    │ user_id (FK?)    │     不与其它表强关联
+    │ event_type       │
+    │ payload          │
+    │ created_at       │
+    └──────────────────┘
+```
+
+**关键不变量**：
+- 删除 `users` 行 → ON DELETE CASCADE 把所有相关数据带走
+- 删除 `sessions` → 级联删 messages
+- 用户关闭 memory → 后续不再写 user_profiles / relationship_* / memory_summaries
+- 用户删除 memory → 删 memory_summaries / user_profiles，匿名化 relationship_entities (label → '匿名对象')
+- `messages.structured_json._actionCard` 是富文本卡片快照，hydrate 时用
+
+---
+
+### 3.7 Orchestrator 决策状态机
+
+从 IntakeResult 到最终 mode 的决策路径，包含智能融合层与 skipTextReplay 分支。
+
+```
+                            ┌─────────────────────┐
+                            │  IntakeResult       │
+                            │  + classifyByKeyword│
+                            └──────────┬──────────┘
+                                       │
+                                       ▼
+                            effective_risk = max(
+                              intake.risk_level,
+                              keyword_classifier
+                            )
+                                       │
+                                       ▼
+                          ┌────────────────────────┐
+                          │ effective_risk ?       │
+                          └────┬──────┬──────┬─────┘
+                               │      │      │
+                  critical/high│ medium│  low │
+                               │      │      │
+                               ▼      ▼      ▼
+                       ┌──────────┐ ┌──────────────────┐
+                       │ mode =   │ │ 脆弱状态缓冲检查  │
+                       │ 'safety' │ │ - emotion ∈      │
+                       │          │ │   {desperate,    │
+                       │ 跳过智能 │ │    numb}?        │
+                       │ 融合层    │ │ - 上一轮 risk =   │
+                       │ 跳过预运行│ │   medium?        │
+                       │          │ └────┬─────────┬───┘
+                       │          │      │ 命中    │ 否
+                       │          │      ▼         ▼
+                       │          │  ┌────────┐  ┌──────────────┐
+                       │          │  │ mode = │  │ readIntent   │
+                       │          │  │companion│  │ (intake)     │
+                       │          │  └────────┘  └──────┬───────┘
+                       │          │                     │
+                       │          │           ┌─────────┼──────────────┬──────────────┬──────────┐
+                       │          │           │         │              │              │          │
+                       │          │           │ request │ message      │ create_plan  │ checkin  │
+                       │          │           │_analysis│ _coach       │              │          │
+                       │          │           ▼         ▼              ▼              ▼          ▼
+                       │          │     ┌──────────┐ ┌──────────┐ ┌────────────┐ ┌──────────┐ ┌──────┐
+                       │          │     │ mode =   │ │ mode =   │ │ planType?  │ │ active   │ │ 不动 │
+                       │          │     │analysis  │ │ coach    │ │            │ │  plan?   │ │ mode │
+                       │          │     │          │ │          │ │ 明确  模糊  │ │          │ │      │
+                       │          │     │          │ │          │ │ │     │    │ │ 有  无    │ │      │
+                       │          │     │          │ │          │ │ ▼     ▼    │ │ │   │    │ │      │
+                       │          │     │          │ │          │ │createPlan  │ │ │   │    │ │      │
+                       │          │     │          │ │          │ │push        │ │ │   │    │ │      │
+                       │          │     │          │ │          │ │'plan_      │ │ │   │    │ │      │
+                       │          │     │          │ │          │ │created'    │ │ │   │    │ │      │
+                       │          │     │          │ │          │ │↓           │ │ │   │    │ │      │
+                       │          │     │          │ │          │ │mode=       │ │ │   │    │ │      │
+                       │          │     │          │ │          │ │recovery    │ │ │   │    │ │      │
+                       │          │     │          │ │          │ │            │ │ │   │    │ │      │
+                       │          │     │          │ │          │ │push 'plan_ │ │ │   │    │ │      │
+                       │          │     │          │ │          │ │options' +  │ │ │   │    │ │      │
+                       │          │     │          │ │          │ │intentForced│ │ │   │    │ │      │
+                       │          │     │          │ │          │ │Text        │ │ │   │    │ │      │
+                       │          │     │          │ │          │ │↓           │ │ │   │    │ │      │
+                       │          │     │          │ │          │ │mode=       │ │ │   │    │ │      │
+                       │          │     │          │ │          │ │companion   │ │ │   │    │ │      │
+                       │          │     └────┬─────┘ └────┬─────┘ └────────────┘ │ │   │    │ │      │
+                       │          │          │            │                       │ │   │    │ │      │
+                       │          │          ▼            ▼                       │ │   │    │ │      │
+                       │          │   ┌────────────┐┌────────────┐                 │ │   │    │ │      │
+                       │          │   │预运行       ││预运行       │                 │ │   │    │ │      │
+                       │          │   │tongAnalysis││messageCoach│                 │ │   │    │ │      │
+                       │          │   │            ││            │                 │ │   │    │ │      │
+                       │          │   │push        ││push        │                 │ │   │    │ │      │
+                       │          │   │'analysis_  ││'coach_     │                 │ │   │    │ │      │
+                       │          │   │result'     ││result'     │                 │ │   │    │ │      │
+                       │          │   │            ││            │                 │ │   │    │ │      │
+                       │          │   │skipText    ││skipText    │                 │ │   │    │ │      │
+                       │          │   │Replay=true ││Replay=true │                 │ │   │    │ │      │
+                       │          │   └────────────┘└────────────┘                 │ │   │    │ │      │
+                       │          │                                                │ │   │    │ │      │
+                       │          │                                              checkedIn?│    │ │      │
+                       │          │                                                │ 否 │ 是  │ │      │
+                       │          │                                                │ ▼  │ ▼   │ │      │
+                       │          │                                                │ completeCheckin│      │
+                       │          │                                                │ push 'checkin_  │      │
+                       │          │                                                │ done' +intent  │      │
+                       │          │                                                │ Forced (companion)    │
+                       │          │                                                │  │   │    │ │      │
+                       │          │                                                ▼  ▼   ▼    ▼ ▼      │
+                       │          │                                       ┌──────────────────────────┐  │
+                       │          │                                       │ mode = intake.next_mode  │  │
+                       │          │                                       │ (companion / recovery)   │  │
+                       │          │                                       └──────────────────────────┘  │
+                       │          │                                                                      │
+                       └──────────┴──────────────────────┬──────────────────────────────────────────────┘
+                                                          │
+                                                          ▼
+                                              ┌──────────────────────┐
+                                              │ Step 6 模式路由       │
+                                              │ Step 7-8 收集 buffer  │
+                                              │ Step 9 Guard + retry │
+                                              │ Step 10 sanitizeText │
+                                              │ Step 11 写 messages  │
+                                              │ Step 12 yield action │
+                                              │   + delta (条件)     │
+                                              │ Step 13 异步任务      │
+                                              └──────────────────────┘
+```
+
+**关键决策点**：
+- **risk 优先**：critical / high 一律 safety，跳过所有智能融合层判断
+- **脆弱缓冲**：medium 风险或脆弱情绪一律 companion，避免触发"分析型"回复加重内耗
+- **intent 改写**：智能融合层只在 risk < high 时生效，可以把默认 next_mode 改写到 analysis / coach / recovery，并 push 富文本卡片
+- **skipTextReplay**：只有 analysis / coach 模式（且预运行成功 push 了卡片）会置 true，其它分支照常文字回放
 
 ---
 
@@ -1428,5 +2092,6 @@ pnpm --filter @emotion/web run build
 |---|---|---|
 | 2026-04-08 | 初次完整整理，覆盖 Phase 0-7 全部架构 | Phase 7 部署完成时 |
 | 2026-04-09 | Phase 7+ 维护期更新：智能融合层 ActionCard 持久化（`structured_json._actionCard` + hydrate 重建）；analysis/coach 引入 `skipTextReplay`，DB 写占位符避免文字与卡片重复；tong-analysis parser 增加截断抢救路径 + maxTokens 升 4096；orchestrator 输出统一过 `sanitizeText`（只过滤 U+FFFD 与控制字符，emoji 放行）；guard 内置 `sanitizeForGuard`；message-coach / companion-response prompt 硬性禁 emoji；`AnalysisResultSchema.tone` 恢复严格 enum；前端全站字号统一 + ChatPage 顶栏导航修复 | 维护轮 |
+| 2026-04-09 | Section 三 重写为「系统架构与部署拓扑」7 张详细架构图：3.1 部署拓扑（四层物理视图）/ 3.2 后端进程内部架构 / 3.3 Monorepo 包依赖 DAG / 3.4 POST /api/chat/stream 请求生命周期序列图（13 步）/ 3.5 智能融合层 ActionCard 数据流（流式 vs hydrate 双路径）/ 3.6 数据库 ER 简图 / 3.7 Orchestrator 决策状态机 | 维护轮 |
 
 > 后续每个 Phase 完成或重大架构调整后，请在此追加一行。
