@@ -83,6 +83,10 @@ export async function runTongAnalysis(
       maxTokens: deps.maxTokens ?? 4096,
       signal: deps.signal,
       timeoutMs: deps.timeoutMs,
+      // 强制 JSON 模式：让 provider 约束模型只输出合法 JSON，
+      // 减少 pretty-print（浪费 token）和非 JSON 前言。
+      // Anthropic provider 会忽略此字段。
+      jsonMode: true,
     });
   } catch (err) {
     // 网络/超时/AI 错误一律降级，让 orchestrator 用安全文本继续
@@ -96,8 +100,14 @@ export async function runTongAnalysis(
   const result = parseTongAnalysisOutput(raw);
   if (result === SAFE_DEFAULT_ANALYSIS) {
     deps.logger?.warn(
-      { rawLength: raw.length, rawPreview: raw.slice(0, 200) },
+      { rawLength: raw.length, rawPreview: raw.slice(0, 500) },
       '[tong-analysis] JSON parse failed, degrading to SAFE_DEFAULT'
+    );
+  } else if (result.confidence === 0.3 && result.evidence.length === 0) {
+    // confidence=0.3 + empty evidence = 截断抢救路径命中，不是完整解析
+    deps.logger?.warn(
+      { rawLength: raw.length, analysisLen: result.analysis.length },
+      '[tong-analysis] truncated JSON rescued (partial result, confidence=0.3)'
     );
   }
   return result;

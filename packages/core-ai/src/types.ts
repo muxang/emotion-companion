@@ -16,6 +16,14 @@ export interface AICompleteOptions {
   maxTokens?: number;
   signal?: AbortSignal;
   timeoutMs?: number;
+  /**
+   * 强制 JSON 输出模式（OpenAI-compatible provider 专用）。
+   * 设为 true 时 provider 会在 API 请求中加
+   * `response_format: { type: 'json_object' }`，
+   * 模型被约束只能输出合法 JSON，大幅减少截断和格式错误。
+   * Anthropic provider 会忽略此字段。
+   */
+  jsonMode?: boolean;
 }
 
 export interface AIStreamOptions {

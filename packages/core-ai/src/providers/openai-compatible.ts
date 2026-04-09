@@ -49,6 +49,10 @@ export class OpenAICompatibleClient implements AIClient {
           messages,
           max_tokens: options.maxTokens ?? this.defaultMaxTokens,
           stream: false,
+          // jsonMode=true 时约束模型只输出合法 JSON，减少截断和格式错误
+          ...(options.jsonMode
+            ? { response_format: { type: 'json_object' as const } }
+            : {}),
         },
         { signal: ac.signal }
       );

@@ -28,7 +28,14 @@
 ### ⭐ 实时跟踪 API 日志
 
 ```bash
+# 主 API
 sudo journalctl -u emotion-api -f
+
+# Admin API
+sudo journalctl -u emotion-admin-api -f
+
+# 两个一起看
+sudo journalctl -u emotion-api -u emotion-admin-api -f
 ```
 
 - `-u emotion-api` 只看这个服务
@@ -814,3 +821,4 @@ sudo nginx -t && sudo systemctl reload nginx
 | 2026-04-08 | 初版 |
 | 2026-04-09 | 新增故障 playbook 场景 H/I/J/K：tong-analysis JSON parse 降级、◆ 乱码定位、ActionCard 持久化排查、analysis/coach 文字重复排查 |
 | 2026-04-08 | 多 Provider 支持：AI_PROVIDER / OPENAI_API_KEY / OPENAI_BASE_URL；更新 AI 相关排查步骤 |
+| 2026-04-09 | Admin 后台上线：日志查看命令补 emotion-admin-api；`deploy.sh` 现在自动管两个服务；新增 `add-admin-api.sh` 一键增量部署脚本 |

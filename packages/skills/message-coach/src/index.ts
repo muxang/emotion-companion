@@ -67,6 +67,7 @@ export async function runMessageCoach(
       maxTokens: deps.maxTokens ?? 768,
       signal: deps.signal,
       timeoutMs: deps.timeoutMs,
+      jsonMode: true,
     });
   } catch {
     return SAFE_DEFAULT_COACH;

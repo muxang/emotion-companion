@@ -1,6 +1,6 @@
 # Emotion Companion · 系统架构总览
 
-> 最后更新：2026-04-09（Phase 7+ 维护期：智能融合层 ActionCard 持久化 + 详细架构图集）
+> 最后更新：2026-04-09（Phase 7+：智能融合层 + Admin 后台 + 详细架构图集）
 >
 > 本文档面向**开发者 / 运维 / 接手维护的人**，目标是让任何人在 30 分钟内掌握这个项目的全貌、可以独立排查线上问题、可以独立做小幅迭代。
 >
@@ -32,9 +32,10 @@
 13. [Auth 流程](#十三auth-流程)
 14. [Streaming（SSE）流程](#十四streamingsse流程)
 15. [Analytics 埋点](#十五analytics-埋点)
-16. [Phase 历史](#十六phase-历史)
-17. [运维操作手册](#十七运维操作手册)
-18. [已知限制与未来工作](#十八已知限制与未来工作)
+16. [Admin 管理后台](#十六admin-管理后台)
+17. [Phase 历史](#十七phase-历史)
+18. [运维操作手册](#十八运维操作手册)
+19. [已知限制与未来工作](#十九已知限制与未来工作)
 
 ---
 
@@ -123,9 +124,9 @@
 │                          ││  api.botjive.net)    ││                          │
 │  ┌────────────────────┐  │└──────────────────────┘│  ┌────────────────────┐  │
 │  │  Vercel Global CDN │  │                        │  │ Cloudflare DNS     │  │
-│  │  apps/web 静态构建 │  │                        │  │ (grey cloud / DNS) │  │
-│  │  *.vercel.app +    │  │                        │  │ A 记录:            │  │
-│  │  自定义域名        │  │                        │  │ api.botjive.net    │  │
+│  │  ① apps/web 用户端 │  │                        │  │ (grey cloud / DNS) │  │
+│  │  ② apps/admin 管理 │  │                        │  │ A 记录:            │  │
+│  │  各自独立 Vercel 项目│  │                        │  │ api.botjive.net    │  │
 │  └────────────────────┘  │                        │  │  → VPS IPv4         │  │
 │                          │                        │  └─────────┬──────────┘  │
 └──────────────────────────┘                        └────────────┼─────────────┘
@@ -137,25 +138,25 @@
 │  ┌────────────────────────────────────────────────────────────────────────┐ │
 │  │ Nginx 1.22  (TLS termination + 反代 + SSE 优化)                          │ │
 │  │   - HTTPS 443 (Let's Encrypt, certbot 自动续期)                          │ │
-│  │   - location /api/ → http://127.0.0.1:3000                              │ │
-│  │   - SSE 路径关闭 buffering: proxy_buffering off; proxy_read_timeout 600s│ │
+│  │   - location /       → http://127.0.0.1:3000  (主 API, SSE 关 buffering)│ │
+│  │   - location /admin/ → http://127.0.0.1:3001  (Admin API)               │ │
 │  │   - access.log / error.log → /var/log/nginx/                            │ │
-│  └────────────────────────────────────┬───────────────────────────────────┘ │
-│                                       │ 127.0.0.1:3000                       │
-│  ┌────────────────────────────────────▼───────────────────────────────────┐ │
-│  │ systemd unit: emotion-api.service                                       │ │
-│  │   ExecStart=node --import tsx apps/api/src/index.ts                     │ │
-│  │   Restart=on-failure  RestartSec=5                                      │ │
-│  │   User=emotion        WorkingDirectory=/home/emotion/emotion            │ │
-│  │   ┌─────────────────────────────────────────────────────────────────┐  │ │
-│  │   │ Node 20 + tsx loader  →  Fastify 4 (HTTP/1.1)                    │  │ │
-│  │   │   plugins:    @fastify/cors, @fastify/jwt, @fastify/rate-limit  │  │ │
-│  │   │   middleware: requireAuth (JWT 校验 + 用户挂载)                   │  │ │
-│  │   │   routes:     auth / sessions / chat-stream(SSE) / analysis /    │  │ │
-│  │   │               recovery / memory / settings / health               │  │ │
-│  │   │   依赖注入:   AIClient + Repos + Memory + Tracker + Logger        │  │ │
-│  │   └─────────────────────────────────────────────────────────────────┘  │ │
-│  └─────┬──────────────────────────────────────────────────────────┬───────┘ │
+│  └──────────────────┬─────────────────────────────────┬───────────────────┘ │
+│                      │ 127.0.0.1:3000                   │ 127.0.0.1:3001     │
+│  ┌───────────────────▼────────────────────────┐ ┌──────▼──────────────────┐ │
+│  │ systemd: emotion-api.service               │ │ systemd:               │ │
+│  │  ExecStart=node --import tsx                │ │  emotion-admin-api     │ │
+│  │    apps/api/src/index.ts                    │ │  .service              │ │
+│  │  ┌──────────────────────────────────────┐  │ │ ┌──────────────────┐  │ │
+│  │  │ Fastify 4 · 主 API                    │  │ │ │ Fastify 4        │  │ │
+│  │  │  auth / sessions / chat-stream(SSE)  │  │ │ │ Admin API        │  │ │
+│  │  │  analysis / recovery / memory /      │  │ │ │  overview / users│  │ │
+│  │  │  settings / health                   │  │ │ │  conversations / │  │ │
+│  │  │  + orchestrator + skills + guard     │  │ │ │  safety / recovery│  │ │
+│  │  └──────────────────────────────────────┘  │ │ │  analytics /health│  │ │
+│  │  依赖: AIClient + Repos + Memory + Tracker │ │ │  X-Admin-Token 鉴权│  │ │
+│  └─────┬──────────────────────────────────────┘ │ └──────────────────┘  │ │
+│        │                                          └──────┬───────────────┘ │
 └────────┼──────────────────────────────────────────────────────────┼─────────┘
          │ TLS                                                       │ TLS
          │                                                           │
@@ -1808,7 +1809,117 @@ location / {
 
 ---
 
-## 十六、Phase 历史
+## 十六、Admin 管理后台
+
+### 系统架构
+
+Admin 后台是一套独立于用户端的**运营管理面板**，拥有自己的前后端，但与主 API **共享同一个数据库和同一个域名**。
+
+```
+apps/admin (React SPA)          apps/admin-api (Fastify)
+   Vercel 部署                       VPS :3001
+        │                               │
+        │  VITE_ADMIN_API_URL            │  /admin/* 路由
+        └────────────────────►   api.botjive.net
+                                         │
+                                    Nginx 按路径分流
+                                  ┌──────┴──────┐
+                                  │             │
+                             /admin/*       其它 /*
+                                  │             │
+                                  ▼             ▼
+                             :3001          :3000
+                          admin-api       emotion-api
+                                  │             │
+                                  └──────┬──────┘
+                                         │
+                                   Supabase PG（同库）
+```
+
+**关键设计决策**：
+- **同域名路径分流**：不用额外域名 / SSL 证书。Nginx `location /admin/` → 3001，`location /` → 3000
+- **独立鉴权**：Admin API 用 `X-Admin-Token` 头 + 静态 token 校验（不走 JWT），与用户鉴权完全隔离
+- **只读为主**：Admin API 做的是 SELECT 聚合查询，不写 messages / sessions 等核心表
+- **独立进程**：admin-api 挂了不影响用户端 emotion-api，反过来也一样
+
+### 技术栈
+
+| 层 | 技术 | 备注 |
+|---|---|---|
+| Admin 前端 | React 18 + Vite + TypeScript | 独立 Vercel 项目 |
+| Admin 后端 | Node.js 20 + Fastify 4 + TypeScript | 同 VPS，systemd unit：`emotion-admin-api` |
+| 鉴权 | `X-Admin-Token` 请求头 | 至少 32 字符随机串，存在 `apps/admin-api/.env` |
+| 数据库 | 复用主 API 的 Supabase Postgres | 同一个 `DATABASE_URL`，只做 SELECT |
+
+### Admin API 路由
+
+全部路由以 `/admin` 为前缀，受 `adminAuth` 中间件保护（public 除外）。
+
+| 路由 | 方法 | 说明 |
+|---|---|---|
+| `/admin/health` | GET | 健康检查（public，可选转发主 API `/api/health`）|
+| `/admin/overview` | GET | 数据概览：用户数 / 消息数 / 模式分布 / 情绪分布 / safety 触发 |
+| `/admin/users` | GET | 用户列表（分页 + 搜索），含会话数 / 消息数 / 活跃状态 |
+| `/admin/users/:id` | GET | 用户详情：统计 / 近期会话 / active plan / 关系实体 / 情绪趋势 |
+| `/admin/users/:id/sessions` | GET | 用户会话列表（分页）|
+| `/admin/users/:id/sessions/:sid` | GET | 会话内消息详情 |
+| `/admin/conversations` | GET | 全局消息列表，支持按 risk_level / mode / 日期过滤 |
+| `/admin/safety` | GET | 安全事件列表（`risk_level IN ('high','critical')` 的消息）|
+| `/admin/recovery/stats` | GET | 恢复计划统计：总数 / 进行中 / 完成率 / 类型分布 / 打卡率 |
+| `/admin/analytics` | GET | 埋点事件查询 |
+
+### Admin 前端页面
+
+| 路径 | 页面 | 说明 |
+|---|---|---|
+| `/admin/login` | LoginPage | 输入 ADMIN_TOKEN 登录 |
+| `/admin` | OverviewPage | 数据概览仪表盘 |
+| `/admin/users` | UsersPage | 用户列表 + 搜索 |
+| `/admin/users/:id` | UserDetailPage | 用户详情 + 会话消息查看器 |
+| `/admin/conversations` | ConversationsPage | 全局消息列表 + 筛选 |
+| `/admin/safety` | SafetyPage | 安全事件 |
+| `/admin/recovery` | RecoveryPage | 恢复计划统计 |
+
+### 环境变量
+
+`apps/admin-api/.env`：
+
+```env
+NODE_ENV=production
+DATABASE_URL=<与主 API 相同>
+DATABASE_SSL=true
+ADMIN_PORT=3001
+ADMIN_HOST=127.0.0.1
+ADMIN_TOKEN=<openssl rand -hex 32 生成，至少 32 字符>
+ADMIN_CORS_ORIGIN=https://你的admin-vercel域名.vercel.app
+LOG_LEVEL=info
+API_BASE_URL=http://127.0.0.1:3000
+```
+
+`apps/admin` Vercel 环境变量：
+
+```env
+VITE_ADMIN_API_URL=https://api.botjive.net
+```
+
+### 部署脚本
+
+| 脚本 | 用途 |
+|---|---|
+| `scripts/vps/add-admin-api.sh` | **一键增量部署**：在已有 emotion-api 的 VPS 上添加 admin-api。自动复用 DATABASE_URL、生成 ADMIN_TOKEN、安装 systemd unit、更新 Nginx、启动服务。幂等可重跑 |
+| `scripts/vps/deploy.sh` | **日常更新**：自动 typecheck + 重启两个 API（emotion-api + emotion-admin-api），admin-api 未安装时静默跳过 |
+
+### 前后端数据格式约定
+
+Admin API 统一返回 `{ success: true, data: ..., timestamp: ... }` 格式。
+
+- **分页列表**：`data` 是数组，`total` / `page` 在同级。前端用 `adminPaginatedRequest` 提取 `{ items, total, page }`
+- **详情/统计**：`data` 是对象，前端用 `adminRequest` 自动 unwrap 拿到 data 内容
+- **查询参数**：分页用 `page` + `limit`（不是 `page_size`）
+
+---
+
+## 十七、Phase 历史
 
 按时间顺序：
 
@@ -1822,13 +1933,14 @@ location / {
 | **5** | ✅ | 短期 / 长期记忆、relationship_entities / events、memory_summaries、`/api/memory/timeline` + `/delete` 接口、成长页 |
 | **6** | ✅ | 7-day-breakup / 14-day-rumination 计划、recovery-plan skill、单日任务、心情打卡、幂等保护 |
 | **7** | ✅ | safety AI 二次分类、guard 强化、健康检查接口（DB+Redis+version+uptime）、限流（Redis store+内存 fallback）、analytics 埋点、生产环境校验、settings 接口、auto-title、VPS 一键部署脚本 |
-| **7+** | ✅ | 智能融合层 `pendingActions` + 5 种 ActionCard 持久化（`structured_json._actionCard`）；analysis/coach 跳过文字回放（`skipTextReplay`）改为只渲染卡片 + DB 占位符；tong-analysis parser 截断抢救（`extractAnalysisFromTruncated` + `confidence: 0.3`）+ max_tokens 4096；`sanitizeText` 输出清洗（U+FFFD + 控制字符，**不动 emoji**）；prompt 层硬性禁 emoji；`AnalysisResultSchema.tone` 恢复严格 enum；前端字号体系全站统一 + ChatPage 顶栏导航修复 |
+| **7+** | ✅ | 智能融合层 ActionCard 持久化；analysis/coach `skipTextReplay`；tong-analysis parser 截断抢救 + max_tokens 4096；`sanitizeText` 输出清洗；prompt 层禁 emoji；前端字号统一 + 引导 UI |
+| **Admin** | ✅ | `apps/admin`（React + Vite → Vercel）+ `apps/admin-api`（Fastify :3001 → 同 VPS）；概览仪表盘、用户管理、对话浏览、安全事件、恢复计划统计、情绪趋势；X-Admin-Token 鉴权；一键部署脚本 `add-admin-api.sh` |
 
 每个 Phase 的关键决策见 `docs/phases/phaseN.md`（如有）。
 
 ---
 
-## 十七、运维操作手册
+## 十八、运维操作手册
 
 > 完整版请看 **[`docs/runbook.md`](./runbook.md)** —— 那里有日志查看的所有姿势、故障 playbook、应急回滚、常用 alias 配置等。
 >
@@ -1847,32 +1959,32 @@ git add . && git commit -m "..." && git push origin main
 sudo -u emotion -H bash /home/emotion/emotion/scripts/vps/deploy.sh
 ```
 
-deploy.sh 会做：`git pull` → `pnpm install --frozen-lockfile` → `typecheck` → `db:migrate` → `systemctl restart emotion-api` → curl `/api/health` 自检。
+deploy.sh 会做：`git pull` → `pnpm install` → typecheck（api + admin-api）→ `db:migrate` → 重启两个服务 → 双健康检查。
 
 ### 日志 / 状态 / 重启
 
 ```bash
-# 实时日志
-sudo journalctl -u emotion-api -f
+# ---- 主 API ----
+sudo journalctl -u emotion-api -f                  # 实时日志
+sudo systemctl status emotion-api                   # 状态
+sudo systemctl restart emotion-api                  # 重启
 
-# 最近 100 行
-sudo journalctl -u emotion-api -n 100 --no-pager
-
-# 服务状态
-sudo systemctl status emotion-api
-
-# 重启
-sudo systemctl restart emotion-api
-
-# 停止
-sudo systemctl stop emotion-api
+# ---- Admin API ----
+sudo journalctl -u emotion-admin-api -f             # 实时日志
+sudo systemctl status emotion-admin-api             # 状态
+sudo systemctl restart emotion-admin-api            # 重启
 ```
 
 ### 改环境变量
 
 ```bash
+# 主 API
 sudo nano /home/emotion/emotion/apps/api/.env
 sudo systemctl restart emotion-api
+
+# Admin API
+sudo nano /home/emotion/emotion/apps/admin-api/.env
+sudo systemctl restart emotion-admin-api
 ```
 
 ### 改 Nginx 配置
@@ -1886,9 +1998,13 @@ sudo systemctl reload nginx             # 平滑重载
 ### 改 systemd unit
 
 ```bash
+# 主 API
 sudo nano /etc/systemd/system/emotion-api.service
-sudo systemctl daemon-reload            # 必须先 reload
-sudo systemctl restart emotion-api
+# Admin API
+sudo nano /etc/systemd/system/emotion-admin-api.service
+
+sudo systemctl daemon-reload
+sudo systemctl restart emotion-api emotion-admin-api
 ```
 
 ### 强制续期 HTTPS 证书
@@ -1933,7 +2049,7 @@ bootstrap.sh 是幂等的，会自动跳过已完成的步骤。
 
 ---
 
-## 十八、已知限制与未来工作
+## 十九、已知限制与未来工作
 
 ### 已知限制
 
@@ -2028,10 +2144,30 @@ LOG_LEVEL=info
 # CRISIS_HOTLINES_OVERRIDE="热线1 400-xxx;热线2 010-xxx"
 ```
 
+`apps/admin-api/.env`：
+
+```env
+NODE_ENV=production
+DATABASE_URL=<与主 API 相同的 Supabase 连接串>
+DATABASE_SSL=true
+ADMIN_PORT=3001
+ADMIN_HOST=127.0.0.1
+ADMIN_TOKEN=<openssl rand -hex 32 生成>
+ADMIN_CORS_ORIGIN=https://你的admin-vercel域名.vercel.app
+LOG_LEVEL=info
+API_BASE_URL=http://127.0.0.1:3000
+```
+
 `apps/web` 的环境变量（在 Vercel 设置）：
 
 ```env
 VITE_API_BASE_URL=https://api.botjive.net
+```
+
+`apps/admin` 的环境变量（在 Vercel 设置）：
+
+```env
+VITE_ADMIN_API_URL=https://api.botjive.net
 ```
 
 > ⚠️ `VITE_` 前缀变量会被打包进前端 bundle，**绝对不能放任何密钥**。
@@ -2052,6 +2188,12 @@ pnpm --filter @emotion/api run dev
 
 # 单独启动前端
 pnpm --filter @emotion/web run dev
+
+# 启动 admin 后端（:3001）
+pnpm --filter @emotion/admin-api run dev
+
+# 启动 admin 前端（:5174）
+pnpm --filter @emotion/admin run dev
 
 # 全栈类型检查
 pnpm run typecheck
@@ -2075,6 +2217,7 @@ pnpm --filter @emotion/web run build
 ## 附录 C：参考文档
 
 - **CLAUDE.md** — 项目铁律（最高优先级，覆盖所有技术决策）
+- **docs/business-review.md** — 业务形态全景与扩展方向（产品 / 战略层面）
 - **scripts/vps/README.md** — VPS 部署完整文档
 - **Anthropic Messages API** — https://docs.anthropic.com/en/api/messages
 - **Fastify** — https://fastify.dev
@@ -2092,6 +2235,7 @@ pnpm --filter @emotion/web run build
 |---|---|---|
 | 2026-04-08 | 初次完整整理，覆盖 Phase 0-7 全部架构 | Phase 7 部署完成时 |
 | 2026-04-09 | Phase 7+ 维护期更新：智能融合层 ActionCard 持久化（`structured_json._actionCard` + hydrate 重建）；analysis/coach 引入 `skipTextReplay`，DB 写占位符避免文字与卡片重复；tong-analysis parser 增加截断抢救路径 + maxTokens 升 4096；orchestrator 输出统一过 `sanitizeText`（只过滤 U+FFFD 与控制字符，emoji 放行）；guard 内置 `sanitizeForGuard`；message-coach / companion-response prompt 硬性禁 emoji；`AnalysisResultSchema.tone` 恢复严格 enum；前端全站字号统一 + ChatPage 顶栏导航修复 | 维护轮 |
-| 2026-04-09 | Section 三 重写为「系统架构与部署拓扑」7 张详细架构图：3.1 部署拓扑（四层物理视图）/ 3.2 后端进程内部架构 / 3.3 Monorepo 包依赖 DAG / 3.4 POST /api/chat/stream 请求生命周期序列图（13 步）/ 3.5 智能融合层 ActionCard 数据流（流式 vs hydrate 双路径）/ 3.6 数据库 ER 简图 / 3.7 Orchestrator 决策状态机 | 维护轮 |
+| 2026-04-09 | Section 三 重写为「系统架构与部署拓扑」7 张详细架构图 | 维护轮 |
+| 2026-04-09 | Admin 管理后台全栈上线：apps/admin（Vercel）+ apps/admin-api（VPS :3001 同域名路径分流）；新增 Section 十六 Admin 管理后台；部署拓扑图更新为双服务架构；运维手册 / 环境变量 / 开发命令补全 admin 部分；一键增量部署脚本 `add-admin-api.sh` | 维护轮 |
 
 > 后续每个 Phase 完成或重大架构调整后，请在此追加一行。
