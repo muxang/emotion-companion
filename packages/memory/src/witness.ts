@@ -500,13 +500,13 @@ const TYPE_PROMPTS: Record<
 
   milestone_5: {
     systemSuffix: `你注意到：这个人来到这里已经5次了。你想说的是：你记录了这5次，你看见了他们一直在来。`,
-    buildUserPrompt: (ev, data) =>
+    buildUserPrompt: (_ev, data) =>
       `这个人来了5次。${data.emotionTrend?.direction === 'improving' ? '情绪走向在慢慢好转。' : ''}\n\n请你说一句话。`,
   },
 
   milestone_15: {
     systemSuffix: `你注意到：这个人来到这里已经15次了。你想说的是：你记录了这15次。如果有早期和近期的对话内容，你可以观察他们问的问题有没有什么变化，但不要评判这个变化是好是坏，只是说出你看到的。`,
-    buildUserPrompt: (ev, data) => {
+    buildUserPrompt: (_ev, data) => {
       const first = data.firstMessage ?? '';
       const recent = data.recentMessages[0] ?? '';
       return `这个人来了15次，说了${data.totalMessages}条消息。\n第一次来时说的话："${first}"\n最近说的话："${recent}"\n\n如果能看出关注的事情有什么变化，可以说出来。如果看不出来，就只说你看见他们来了15次这件事。\n\n请你说一句话。`;
@@ -515,7 +515,7 @@ const TYPE_PROMPTS: Record<
 
   milestone_30: {
     systemSuffix: `你注意到：这个人来到这里已经30次了。你想说的是：你记录了这30次。可以观察他们早期和近期关注的事情有什么变化。`,
-    buildUserPrompt: (ev, data) => {
+    buildUserPrompt: (_ev, data) => {
       const first = data.firstMessage ?? '';
       const recent = data.recentMessages[0] ?? '';
       const days = data.firstMessageAt

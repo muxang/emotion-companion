@@ -14,7 +14,6 @@ export function getPool(): pg.Pool {
     ssl: env.DATABASE_SSL ? { rejectUnauthorized: false } : undefined,
     max: 5,
     idleTimeoutMillis: 20_000,
-    maxLifetimeMillis: 5 * 60 * 1000,
     connectionTimeoutMillis: 5_000,
   });
   pool.on('error', (err) => {

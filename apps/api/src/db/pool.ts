@@ -16,9 +16,6 @@ export function getPool(): pg.Pool {
     // Node 侧不知道连接已死，下次查询会 ECONNRESET。
     // 把空闲超时设短（20s），让 Pool 主动关掉闲置连接，下次按需重建。
     idleTimeoutMillis: 20_000,
-    // 连接生命周期上限：即使一直在用也不超过 5 分钟，定期换新。
-    // 防止长寿命连接被服务端防火墙 / LB 静默切断。
-    maxLifetimeMillis: 5 * 60 * 1000,
     // 获取连接超时：默认无超时会永远卡住；设 5s 快速失败。
     connectionTimeoutMillis: 5_000,
   });
