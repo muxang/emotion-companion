@@ -34,6 +34,12 @@ import {
 } from '@emotion/skill-recovery-plan';
 import { collectStream, runFinalResponseGuard } from '@emotion/core-ai';
 import { classifyByKeywords, runFullTriage } from '@emotion/safety';
+import {
+  collectWitnessData,
+  detectWitnessType,
+  generateWitnessMessage,
+  type WitnessType,
+} from '@emotion/memory';
 import type {
   AnalysisResult,
   ConversationMode,
@@ -791,6 +797,80 @@ export async function* orchestrate(
   finalText = sanitizeText(finalText);
   void secondTextHolder; // 仅用于调试时观察
 
+  // ---------- Step 1.6: AI 见证人系统 ----------
+  // 只在 companion 模式 + 非 skipTextReplay + 有 pool + 有 user 时尝试
+  // 失败仅 warn，不阻塞主流程
+  let witnessMessage: string | null = null;
+  let witnessType: WitnessType | null = null;
+  if (
+    decision.mode === 'companion' &&
+    !skipTextReplay &&
+    deps.pool &&
+    deps.user &&
+    !deps.signal.aborted
+  ) {
+    try {
+      log.info(
+        { step: '1.6-witness-start', userId: deps.user.id, requestId },
+        'witness: collecting data'
+      );
+      const witnessData = await collectWitnessData(
+        deps.pool,
+        deps.user.id,
+        decision.effective_risk,
+        input.user_text // 当前消息还没写入 DB，手动传入
+      );
+      const detection = detectWitnessType(witnessData);
+      log.info(
+        {
+          step: 'witness-debug',
+          requestId,
+          userId: deps.user.id,
+          totalSessions: witnessData.totalSessions,
+          totalMessages: witnessData.totalMessages,
+          currentHour: witnessData.currentHour,
+          todayAlreadyWitnessed: witnessData.todayAlreadyWitnessed,
+          currentRiskLevel: witnessData.currentRiskLevel,
+          firstMessage: witnessData.firstMessage?.slice(0, 30) ?? null,
+          recentMessagesCount: witnessData.recentMessages.length,
+          recentFirst: witnessData.recentMessages[0]?.slice(0, 40) ?? null,
+          shouldWitness: detection.shouldWitness,
+          witness_type: detection.witness_type,
+          firstReturn_condition:
+            witnessData.totalMessages >= 1 &&
+            witnessData.totalMessages <= 2 &&
+            witnessData.firstMessage !== null,
+          lateNight_condition:
+            witnessData.currentHour >= 23 || witnessData.currentHour <= 3,
+        },
+        'witness: detection result'
+      );
+      if (detection.shouldWitness && detection.witness_type) {
+        const msg = await generateWitnessMessage(
+          detection.witness_type,
+          detection.trigger_evidence,
+          witnessData,
+          deps.ai
+        );
+        if (msg.length > 0) {
+          witnessMessage = msg;
+          witnessType = detection.witness_type;
+          log.info(
+            { requestId, witnessType: detection.witness_type },
+            'witness triggered'
+          );
+        }
+      }
+    } catch (err) {
+      log.warn({ err, requestId }, 'witness system failed (silent skip)');
+    }
+  }
+
+  // 把见证拼到 finalText 后面
+  if (witnessMessage) {
+    finalText = `${finalText}\n\n· · ·\n\n${witnessMessage}`;
+  }
+
   // ---------- Step 9: 回放给客户端 ----------
   // 在中途 abort 时停止回放，且不写 assistant 消息
   let aborted = false;
@@ -820,20 +900,22 @@ export async function* orchestrate(
                ? (recoveryStructured as unknown as Record<string, unknown>)
                : null;
        const firstAction = pendingActions[0];
-       const finalStructured: Record<string, unknown> | null =
-         baseStructured || firstAction
-           ? {
-               ...(baseStructured ?? {}),
-               ...(firstAction
-                 ? {
-                     _actionCard: {
-                       action_type: firstAction.action_type,
-                       payload: firstAction.payload,
-                     },
-                   }
-                 : {}),
-             }
-           : null;
+       const witnessMarker = witnessType ? { _witness_type: witnessType } : {};
+       const hasAny = baseStructured || firstAction || witnessType;
+       const finalStructured: Record<string, unknown> | null = hasAny
+         ? {
+             ...(baseStructured ?? {}),
+             ...(firstAction
+               ? {
+                   _actionCard: {
+                     action_type: firstAction.action_type,
+                     payload: firstAction.payload,
+                   },
+                 }
+               : {}),
+             ...witnessMarker,
+           }
+         : null;
 
       // 跳过文字回放时（analysis / coach），content 字段写入占位符，
       // 真实内容由 structured_json._actionCard 承载，前端按卡片渲染。

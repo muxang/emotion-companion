@@ -13,7 +13,9 @@ export function getPool(): pg.Pool {
     connectionString: env.DATABASE_URL,
     ssl: env.DATABASE_SSL ? { rejectUnauthorized: false } : undefined,
     max: 5,
-    idleTimeoutMillis: 30_000,
+    idleTimeoutMillis: 20_000,
+    maxLifetimeMillis: 5 * 60 * 1000,
+    connectionTimeoutMillis: 5_000,
   });
   pool.on('error', (err) => {
     // eslint-disable-next-line no-console

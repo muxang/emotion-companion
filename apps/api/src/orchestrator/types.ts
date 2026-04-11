@@ -70,6 +70,11 @@ export interface OrchestratorDeps {
    */
   memory?: OrchestratorMemoryDeps;
   /**
+   * Phase 7+：可选 DB Pool，供 collectWitnessData 查询用户历史消息。
+   * 缺省时 Step 1.6 见证系统跳过。测试环境不需要注入。
+   */
+  pool?: import('pg').Pool;
+  /**
    * Phase 7：可选埋点 tracker，fire-and-forget。
    * 缺省时不埋点（测试环境无需 mock）。
    */

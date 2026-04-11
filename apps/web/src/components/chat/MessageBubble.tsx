@@ -73,12 +73,26 @@ function renderAssistantContent(text: string): JSX.Element {
   );
 }
 
+/** 见证分隔符 */
+const WITNESS_SEPARATOR = '\n\n· · ·\n\n';
+
 export function MessageBubble({
   message,
   showTimestamp = true,
   onPlanOptionSelect,
 }: MessageBubbleProps): JSX.Element {
   const isUser = message.role === 'user';
+
+  // 拆分主回复 vs 见证内容
+  const hasWitness =
+    !isUser && message.content && message.content.includes(WITNESS_SEPARATOR);
+  const mainContent = hasWitness
+    ? message.content.split(WITNESS_SEPARATOR)[0] ?? ''
+    : message.content;
+  const witnessContent = hasWitness
+    ? message.content.split(WITNESS_SEPARATOR).slice(1).join(WITNESS_SEPARATOR)
+    : null;
+
   return (
     <div className={`flex w-full flex-col ${isUser ? 'items-end' : 'items-start'}`}>
       <div
@@ -91,8 +105,8 @@ export function MessageBubble({
       >
         {isUser ? (
           message.content || (message.streaming ? '…' : '')
-        ) : message.content ? (
-          renderAssistantContent(message.content)
+        ) : mainContent ? (
+          renderAssistantContent(mainContent)
         ) : message.streaming ? (
           <TypingDots />
         ) : (
@@ -102,6 +116,18 @@ export function MessageBubble({
           <span className="ml-0.5 inline-block w-1 animate-pulse">▍</span>
         ) : null}
       </div>
+      {witnessContent ? (
+        <div className="mt-2 w-full max-w-[75%]">
+          <div className="flex items-center gap-2 px-1">
+            <span className="text-[11px] tracking-widest text-neutral-300">
+              · · ·
+            </span>
+          </div>
+          <div className="mt-1 rounded-r-lg border-l-2 border-primary-200 bg-primary-50/40 px-3 py-2.5 text-[13px] leading-relaxed text-neutral-500">
+            {witnessContent}
+          </div>
+        </div>
+      ) : null}
       {!isUser && message.actionCard ? (
         <div className="mt-2 w-full max-w-[85%]">
           <ActionCardRenderer

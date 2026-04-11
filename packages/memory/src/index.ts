@@ -7,3 +7,6 @@ export * from './short-term.js';
 export * from './long-term.js';
 export * from './timeline.js';
 export * from './summarizer.js';
+export * from './emotion-trend.js';
+export * from './proactive-care.js';
+export * from './witness.js';

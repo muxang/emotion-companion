@@ -58,7 +58,8 @@
       "Bash(\" docs/architecture.md | head -40)",
       "Bash(pnpm --filter web run test -- tests/ChatInput.test.tsx)",
       "Bash(npx tsc:*)",
-      "Bash(bash -n E:/ai/project/emotion/source/scripts/vps/add-admin-api.sh)"
+      "Bash(bash -n E:/ai/project/emotion/source/scripts/vps/add-admin-api.sh)",
+      "Bash(pnpm --filter @emotion/memory run test)"
     ]
   }
 }

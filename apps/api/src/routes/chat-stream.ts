@@ -3,6 +3,7 @@ import { ChatMessageSchema } from '@emotion/shared';
 import { newRequestId } from '../utils/request-id.js';
 import { loadEnv } from '../config/env.js';
 import { orchestrate } from '../orchestrator/index.js';
+import { getPool } from '../db/pool.js';
 
 /**
  * 解析 CORS_ORIGIN（可能是 "a,b,c"），根据请求 Origin 选择要回写的值。
@@ -233,6 +234,7 @@ export async function chatStreamRoutes(app: FastifyInstance): Promise<void> {
                 }
               : {}),
             ...(app.memoryDeps ? { memory: app.memoryDeps } : {}),
+            pool: getPool(),
             tracker: app.tracker,
           }
         );
