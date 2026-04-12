@@ -4,6 +4,7 @@ import { adminPaginatedRequest, type PaginatedResult } from './client';
 export interface ConversationItem {
   id: string;
   session_id: string;
+  user_id: string;
   anonymous_id: string;
   role: string;
   content: string;

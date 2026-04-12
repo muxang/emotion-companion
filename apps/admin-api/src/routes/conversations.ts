@@ -66,7 +66,7 @@ export async function conversationRoutes(app: FastifyInstance): Promise<void> {
       const listRes = await pool.query(
         `SELECT m.id, m.role, m.content, m.risk_level, m.intake_result,
                 m.structured_json, m.created_at, m.session_id,
-                u.anonymous_id
+                s.user_id, u.anonymous_id
            FROM messages m
            JOIN sessions s ON s.id = m.session_id
            JOIN users u ON u.id = s.user_id
