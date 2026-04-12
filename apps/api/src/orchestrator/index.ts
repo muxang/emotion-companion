@@ -36,7 +36,10 @@ import { collectStream, runFinalResponseGuard } from '@emotion/core-ai';
 import { classifyByKeywords, runFullTriage } from '@emotion/safety';
 import {
   collectWitnessData,
+  detectSessionEnding,
   detectWitnessType,
+  formatSummaryCardText,
+  generateSummaryCard,
   generateWitnessMessage,
   type WitnessType,
 } from '@emotion/memory';
@@ -869,6 +872,48 @@ export async function* orchestrate(
   // 把见证拼到 finalText 后面
   if (witnessMessage) {
     finalText = `${finalText}\n\n· · ·\n\n${witnessMessage}`;
+  }
+
+  // ---------- Step 1.7: 对话收尾小结卡 ----------
+  // companion 模式 + 非 skipTextReplay + 用户发了收尾信号 + 有 pool
+  if (
+    decision.mode === 'companion' &&
+    !skipTextReplay &&
+    deps.pool &&
+    !deps.signal.aborted
+  ) {
+    try {
+      // 取当前会话消息数
+      const countRes = await deps.pool.query<{ count: string }>(
+        `SELECT COUNT(*)::text AS count FROM messages WHERE session_id = $1`,
+        [input.session_id]
+      );
+      const sessionMsgCount = Number(countRes.rows[0]?.count ?? '0');
+      const isEnding = detectSessionEnding(input.user_text, sessionMsgCount);
+
+      if (isEnding) {
+        // 取最近 6 条消息 content
+        const recentRes = await deps.pool.query<{ content: string }>(
+          `SELECT content FROM (
+             SELECT content, created_at FROM messages
+             WHERE session_id = $1 AND role IN ('user', 'assistant')
+             ORDER BY created_at DESC LIMIT 6
+           ) sub ORDER BY created_at ASC`,
+          [input.session_id]
+        );
+        const recentTexts = recentRes.rows.map((r) => r.content);
+        const card = await generateSummaryCard(
+          recentTexts,
+          memoryContext,
+          deps.ai
+        );
+        if (card) {
+          finalText = `${finalText}\n\n· · ·\n\n${formatSummaryCardText(card)}`;
+        }
+      }
+    } catch (err) {
+      log.warn({ err, requestId }, 'summary card generation failed (silent skip)');
+    }
   }
 
   // ---------- Step 9: 回放给客户端 ----------

@@ -189,66 +189,109 @@ export interface MemoryContextExtras {
  *
  * 第二可选参数 extras：携带 active 计划与打卡状态等实时信息。
  */
+const RELATION_CN: Record<string, string> = {
+  ex: '前任',
+  partner: '伴侣',
+  ambiguous: '暧昧对象',
+  friend: '朋友',
+  family: '家人',
+};
+
+const PLAN_CN: Record<string, string> = {
+  '7day-breakup': '7天走出失恋',
+  '14day-rumination': '14天停止内耗',
+};
+
+/**
+ * 从最近 user 消息中提取"决定性"语句。
+ * 不调 AI，纯正则匹配。
+ */
+const DECISION_RE =
+  /我决定|我打算|我要|我不会再|从今天起|我选择|我准备/;
+
+export async function getRecentDecisions(
+  pool: Pool,
+  userId: string,
+  limit = 3
+): Promise<string[]> {
+  const client = await pool.connect();
+  try {
+    const res = await client.query<{ content: string }>(
+      `SELECT m.content FROM messages m
+       JOIN sessions s ON s.id = m.session_id
+       WHERE s.user_id = $1 AND m.role = 'user'
+       ORDER BY m.created_at DESC LIMIT 30`,
+      [userId]
+    );
+    const hits: string[] = [];
+    for (const row of res.rows) {
+      if (DECISION_RE.test(row.content)) {
+        hits.push(row.content.slice(0, 40).replace(/\n/g, ' '));
+        if (hits.length >= limit) break;
+      }
+    }
+    return hits;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * 叙事风格的记忆上下文——给 AI 读的是"故事"，不是"数据"。
+ *
+ * extras.decisions 由调用方调 getRecentDecisions 后传入（可选）。
+ */
 export function formatMemoryContext(
   memory: UserMemory,
-  extras?: MemoryContextExtras
+  extras?: MemoryContextExtras & { decisions?: string[] }
 ): string {
   const parts: string[] = [];
+  parts.push('【这个人的情况】');
 
+  // 最近摘要
+  if (memory.recentSummaries.length > 0) {
+    const s = memory.recentSummaries[0]!;
+    parts.push(`上次他来，说的是："${s.summary_text.slice(0, 50)}"`);
+  }
+
+  // 关系对象
+  if (memory.entities.length > 0) {
+    const e = memory.entities[0]!;
+    const rel = e.relation_type
+      ? RELATION_CN[e.relation_type] ?? '对方'
+      : '对方';
+    parts.push(`他经常提到：${e.label}（关系：${rel}）`);
+    // 如果有相关事件
+    if (memory.recentEvents.length > 0) {
+      const evt = memory.recentEvents[0]!;
+      parts.push(`关于这个人，他说过的事："${evt.summary.slice(0, 40)}"`);
+    }
+  }
+
+  // 恢复计划
   if (extras?.activePlan) {
     const p = extras.activePlan;
+    const planLabel = PLAN_CN[p.plan_type] ?? p.plan_type;
     const checkin =
       extras.checkedInToday === true
-        ? '今日已打卡'
+        ? '今天打卡了。'
         : extras.checkedInToday === false
-          ? '今日尚未打卡'
+          ? '今天还没打卡。'
           : '';
-    const planLabel =
-      p.plan_type === '7day-breakup'
-        ? '7天失恋恢复计划'
-        : p.plan_type === '14day-rumination'
-          ? '14天停止内耗计划'
-          : `${p.plan_type} 计划`;
-    const line = `- 有一个进行中的${planLabel}，今天是第${p.current_day}天（共${p.total_days}天）${checkin ? '；' + checkin : ''}`;
-    parts.push(`【用户当前状态】\n${line}`);
+    parts.push(
+      `他在做一个${planLabel}的计划，今天是第${p.current_day}天。${checkin}`
+    );
   }
 
-  if (memory.profile) {
-    const p = memory.profile;
-    const bits: string[] = [];
-    if (p.attachment_style) bits.push(`依恋风格：${p.attachment_style}`);
-    if (p.common_triggers.length > 0) {
-      bits.push(`常见触发点：${p.common_triggers.slice(0, 5).join('、')}`);
-    }
-    if (bits.length > 0) parts.push(`【用户画像】${bits.join('；')}`);
+  // 最近决定
+  if (extras?.decisions && extras.decisions.length > 0) {
+    parts.push(
+      `他最近说过想做的事：${extras.decisions.map((d) => `"${d}"`).join('、')}`
+    );
   }
 
-  if (memory.entities.length > 0) {
-    const labels = memory.entities
-      .slice(0, 5)
-      .map((e) =>
-        e.relation_type ? `${e.label}（${e.relation_type}）` : e.label
-      )
-      .join('、');
-    parts.push(`【关系对象】${labels}`);
-  }
+  // 如果只有标题没有实际内容
+  if (parts.length <= 1) return '';
 
-  if (memory.recentEvents.length > 0) {
-    const lines = memory.recentEvents.slice(0, 3).map((e) => {
-      const when = e.event_time
-        ? new Date(e.event_time).toISOString().slice(0, 10)
-        : '时间未知';
-      return `- ${when} ${e.event_type}：${e.summary}`;
-    });
-    parts.push(`【关键事件】\n${lines.join('\n')}`);
-  }
-
-  if (memory.recentSummaries.length > 0) {
-    const lines = memory.recentSummaries
-      .slice(0, 3)
-      .map((s, i) => `${i + 1}. ${s.summary_text}`);
-    parts.push(`【近期会话摘要】\n${lines.join('\n')}`);
-  }
-
-  return parts.join('\n\n');
+  return parts.join('\n');
 }

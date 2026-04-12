@@ -123,9 +123,13 @@ export function MessageBubble({
               · · ·
             </span>
           </div>
-          <div className="mt-1 rounded-r-lg border-l-2 border-primary-200 bg-primary-50/40 px-3 py-2.5 text-[13px] leading-relaxed text-neutral-500">
-            {witnessContent}
-          </div>
+          {witnessContent.includes('今天说的：') ? (
+            <SummaryCardBlock text={witnessContent} />
+          ) : (
+            <div className="mt-1 rounded-r-lg border-l-2 border-primary-200 bg-primary-50/40 px-3 py-2.5 text-[13px] leading-relaxed text-neutral-500">
+              {witnessContent}
+            </div>
+          )}
         </div>
       ) : null}
       {!isUser && message.actionCard ? (
@@ -144,6 +148,48 @@ export function MessageBubble({
         >
           {formatHm(message.createdAt)}
         </time>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * 对话收尾小结卡渲染。
+ * 按行解析 "今天说的：" / "情绪：" / "今晚可以做：" / "↩ " 四段。
+ */
+function SummaryCardBlock({ text }: { text: string }): JSX.Element {
+  const lines = text.split('\n').filter((l) => l.length > 0);
+  const coreIssue =
+    lines.find((l) => l.startsWith('今天说的：'))?.replace('今天说的：', '') ?? '';
+  const emotionShift =
+    lines.find((l) => l.startsWith('情绪：'))?.replace('情绪：', '') ?? '';
+  const oneThing =
+    lines.find((l) => !l.startsWith('今天') && !l.startsWith('情绪') && !l.startsWith('↩') && !l.startsWith('今晚') && l.trim().length > 0)
+    ?? '';
+  const nextQ =
+    lines.find((l) => l.startsWith('↩'))?.replace('↩ ', '').replace('↩', '') ?? '';
+
+  return (
+    <div className="mt-2 rounded-2xl border border-primary-100 bg-primary-50/40 p-4">
+      {coreIssue ? (
+        <p className="text-[14px] font-medium leading-relaxed text-neutral-700">
+          今天说的：{coreIssue}
+        </p>
+      ) : null}
+      {emotionShift ? (
+        <p className="mt-1 text-[13px] text-neutral-500">
+          情绪：{emotionShift}
+        </p>
+      ) : null}
+      {oneThing ? (
+        <div className="mt-3 rounded-xl border border-neutral-100 bg-white p-3">
+          <p className="text-[13px] text-neutral-700">· {oneThing}</p>
+        </div>
+      ) : null}
+      {nextQ ? (
+        <div className="mt-3 border-t border-primary-100 pt-3">
+          <p className="text-[13px] italic text-primary-400">↩ {nextQ}</p>
+        </div>
       ) : null}
     </div>
   );

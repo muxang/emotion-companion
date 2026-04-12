@@ -161,12 +161,12 @@ describe('formatMemoryContext', () => {
       ],
     };
     const text = formatMemoryContext(memory);
-    expect(text).toMatch(/用户画像/);
-    expect(text).toMatch(/anxious/);
-    expect(text).toMatch(/关系对象/);
+    // 叙事格式：不再用结构化标签，而是故事感
+    expect(text).toMatch(/这个人的情况/);
+    expect(text).toMatch(/上次他来/);
+    expect(text).toMatch(/分手反复/); // 从 summary_text 来
     expect(text).toMatch(/小A/);
-    expect(text).toMatch(/关键事件/);
-    expect(text).toMatch(/breakup/);
-    expect(text).toMatch(/近期会话摘要/);
+    expect(text).toMatch(/前任/); // relation_type=ex → 前任
+    expect(text).toMatch(/正式提出分手/); // 从 event summary 来
   });
 });
