@@ -182,11 +182,6 @@ export function GrowthPage(): JSX.Element {
           return labelOf(evt.event_type) === timelineFilter;
         });
 
-  // 情绪标签云数据（从 patternsData 里没有情绪数据，用 summaries 间接展示）
-  // 暂时从趋势 API 获取 — 如果有的话
-  const emotionTrend = patternsData as unknown as {
-    patterns?: unknown[];
-  } | null;
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-neutral-50">
@@ -659,12 +654,10 @@ function PatternsSection({
 
 function PatternCard({
   pattern: p,
-  index,
   expanded,
   onToggle,
 }: {
   pattern: RelationshipPattern;
-  index: number;
   expanded: boolean;
   onToggle: () => void;
 }): JSX.Element {
