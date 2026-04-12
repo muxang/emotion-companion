@@ -643,7 +643,6 @@ function PatternsSection({
         <PatternCard
           key={p.pattern_type}
           pattern={p}
-          index={i}
           expanded={expandedNextStep === i}
           onToggle={() => onToggleNextStep(i)}
         />
