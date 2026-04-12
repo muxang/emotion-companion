@@ -10,3 +10,4 @@ export * from './summarizer.js';
 export * from './emotion-trend.js';
 export * from './proactive-care.js';
 export * from './witness.js';
+export * from './pattern-analyzer.js';

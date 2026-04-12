@@ -59,7 +59,8 @@
       "Bash(pnpm --filter web run test -- tests/ChatInput.test.tsx)",
       "Bash(npx tsc:*)",
       "Bash(bash -n E:/ai/project/emotion/source/scripts/vps/add-admin-api.sh)",
-      "Bash(pnpm --filter @emotion/memory run test)"
+      "Bash(pnpm --filter @emotion/memory run test)",
+      "Bash(pnpm --filter web run test -- tests/GrowthPage.test.tsx)"
     ]
   }
 }

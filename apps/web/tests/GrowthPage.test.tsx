@@ -5,12 +5,16 @@ import { MemoryRouter } from 'react-router-dom';
 vi.mock('../src/api/memory.js', () => ({
   getTimeline: vi.fn(),
   deleteMemory: vi.fn(),
+  getEmotionTrend: vi.fn(),
+  getPatterns: vi.fn(),
 }));
 
 import { GrowthPage } from '../src/pages/Growth/GrowthPage.js';
 import {
   getTimeline,
   deleteMemory,
+  getEmotionTrend,
+  getPatterns,
   type GrowthFeed,
   type TimelineEvent,
   type TimelineEntity,
@@ -20,6 +24,8 @@ import { useAuthStore } from '../src/stores/authStore.js';
 
 const mockedGetTimeline = vi.mocked(getTimeline);
 const mockedDeleteMemory = vi.mocked(deleteMemory);
+const mockedGetEmotionTrend = vi.mocked(getEmotionTrend);
+const mockedGetPatterns = vi.mocked(getPatterns);
 
 const EMPTY_FEED: GrowthFeed = { events: [], entities: [], summaries: [] };
 
@@ -35,6 +41,19 @@ describe('<GrowthPage />', () => {
   beforeEach(() => {
     mockedGetTimeline.mockReset();
     mockedDeleteMemory.mockReset();
+    mockedGetEmotionTrend.mockReset();
+    mockedGetPatterns.mockReset();
+    mockedGetEmotionTrend.mockResolvedValue({
+      trend: null,
+      message: '继续聊几次',
+    });
+    mockedGetPatterns.mockResolvedValue({
+      patterns: [],
+      analyzed_messages: 0,
+      sufficient_data: false,
+      cached: false,
+      message: '数据不足',
+    });
     useAuthStore.setState({
       status: 'authed',
       userId: 'u-1',
@@ -46,6 +65,12 @@ describe('<GrowthPage />', () => {
   it('三类信号都为空时显示提示文案', async () => {
     mockedGetTimeline.mockResolvedValueOnce(EMPTY_FEED);
     renderPage();
+
+    // 切到"成长记录" Tab
+    await waitFor(() => {
+      expect(screen.getByText('成长记录')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText('成长记录'));
 
     await waitFor(() => {
       expect(screen.getByTestId('growth-empty')).toBeInTheDocument();
@@ -81,13 +106,20 @@ describe('<GrowthPage />', () => {
 
     renderPage();
 
+    // 切到"成长记录" Tab 才能看到事件时间线
     await waitFor(() => {
-      expect(screen.getByTestId('growth-timeline')).toBeInTheDocument();
+      expect(screen.getByText('成长记录')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText('成长记录'));
+
+    // 等待事件内容渲染完成（tab 切换 + 数据加载都是异步的）
+    // 注意：筛选栏里也有"分手""复合"等文字，所以用 getAllByText
+    await waitFor(() => {
+      expect(screen.getByText('提出分开')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('分手')).toBeInTheDocument();
-    expect(screen.getByText('复合')).toBeInTheDocument();
-    expect(screen.getByText('提出分开')).toBeInTheDocument();
+    expect(screen.getAllByText('分手').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('复合').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('尝试和好')).toBeInTheDocument();
 
     // 倒序：reconcile 应在 breakup 之前
@@ -164,6 +196,12 @@ describe('<GrowthPage />', () => {
 
     renderPage();
 
+    // 切到"成长记录" Tab
+    await waitFor(() => {
+      expect(screen.getByText('成长记录')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText('成长记录'));
+
     await waitFor(() => {
       expect(screen.getByText('冷战中')).toBeInTheDocument();
     });
@@ -186,6 +224,11 @@ describe('<GrowthPage />', () => {
   it('确认弹窗可取消', async () => {
     mockedGetTimeline.mockResolvedValueOnce(EMPTY_FEED);
     renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('成长记录')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText('成长记录'));
 
     await waitFor(() => {
       expect(screen.getByTestId('growth-empty')).toBeInTheDocument();

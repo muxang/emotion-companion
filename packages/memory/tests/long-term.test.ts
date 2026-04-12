@@ -14,11 +14,18 @@ function makeFakePool(rowsByCall: Array<unknown[]>): {
   callCount: () => number;
 } {
   let i = 0;
+  const queryFn = async () => {
+    const rows = rowsByCall[i] ?? [];
+    i++;
+    return { rows };
+  };
   const pool = {
-    async query() {
-      const rows = rowsByCall[i] ?? [];
-      i++;
-      return { rows };
+    async query() { return queryFn(); },
+    async connect() {
+      return {
+        query: queryFn,
+        release: () => {},
+      };
     },
   } as unknown as Parameters<typeof getUserMemory>[0];
   return { pool, callCount: () => i };

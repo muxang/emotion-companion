@@ -48,6 +48,58 @@ export async function getTimeline(): Promise<GrowthFeed> {
   };
 }
 
+/** 情绪趋势（Phase 7+） */
+export interface EmotionTrend {
+  average_score: number;
+  direction: 'improving' | 'stable' | 'declining';
+  consecutive_low_days: number;
+  peak_hours: number[];
+  dominant_emotion: string;
+  mention_count: Record<string, number>;
+  data_points: number;
+}
+
+export interface EmotionTrendResult {
+  trend: EmotionTrend | null;
+  message: string;
+}
+
+export async function getEmotionTrend(days = 7): Promise<EmotionTrendResult> {
+  return fetchJson<EmotionTrendResult>(
+    `/api/memory/emotion-trend?days=${days}`,
+    { method: 'GET' }
+  );
+}
+
+/** 隐性关系模式（Phase 7+） */
+export interface RelationshipPattern {
+  pattern_type: string;
+  sub_type: string | null;
+  confidence: number;
+  evidence_count: number;
+  hit_examples: string[];
+  title: string;
+  subtitle: string;
+  description: string;
+  real_cost: string;
+  suggestion: string;
+  next_step: string;
+}
+
+export interface PatternsResponse {
+  patterns: RelationshipPattern[];
+  analyzed_messages: number;
+  sufficient_data: boolean;
+  cached: boolean;
+  message: string;
+}
+
+export async function getPatterns(): Promise<PatternsResponse> {
+  return fetchJson<PatternsResponse>('/api/memory/patterns', {
+    method: 'GET',
+  });
+}
+
 interface DeleteMemoryResponse {
   deleted: boolean;
 }

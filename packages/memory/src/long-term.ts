@@ -86,30 +86,33 @@ export async function getUserMemory(
   const eventLimit = options.eventLimit ?? 10;
   const entityLimit = options.entityLimit ?? 20;
 
-  const [profileRes, entitiesRes, summariesRes, eventsRes] = await Promise.all([
-    pool.query<ProfileRow>(
+  // 用单连接串行执行，避免 4 条并行查询各占 1 个连接打满 Pool
+  const client = await pool.connect();
+  let profileRes, entitiesRes, summariesRes, eventsRes;
+  try {
+    profileRes = await client.query<ProfileRow>(
       `SELECT user_id, traits_json, attachment_style,
               boundary_preferences, common_triggers, updated_at
        FROM user_profiles WHERE user_id = $1 LIMIT 1`,
       [userId]
-    ),
-    pool.query<EntityRow>(
+    );
+    entitiesRes = await client.query<EntityRow>(
       `SELECT id, user_id, label, relation_type, notes, created_at, updated_at
        FROM relationship_entities
        WHERE user_id = $1
        ORDER BY updated_at DESC
        LIMIT $2`,
       [userId, entityLimit]
-    ),
-    pool.query<SummaryRow>(
+    );
+    summariesRes = await client.query<SummaryRow>(
       `SELECT id, user_id, session_id, summary_type, summary_text, created_at
        FROM memory_summaries
        WHERE user_id = $1
        ORDER BY created_at DESC
        LIMIT $2`,
       [userId, summaryLimit]
-    ),
-    pool.query<EventRow>(
+    );
+    eventsRes = await client.query<EventRow>(
       `SELECT id, user_id, entity_id, event_type, event_time,
               summary, evidence_json, created_at
        FROM relationship_events
@@ -117,8 +120,10 @@ export async function getUserMemory(
        ORDER BY event_time DESC NULLS LAST, created_at DESC
        LIMIT $2`,
       [userId, eventLimit]
-    ),
-  ]);
+    );
+  } finally {
+    client.release();
+  }
 
   const profile: UserProfileDTO | null = profileRes.rows[0]
     ? {
